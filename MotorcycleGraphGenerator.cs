@@ -10,15 +10,40 @@ namespace Briganti.StraightSkeletons
 {
 	public class MotorcycleGraphGenerator
 	{
-		private readonly PolygonWavefront polygonWavefront;
-
 		private Motorcycle[] motorcycles;
 		private MotorcycleCrash[] motorcycleCrashes;
 		private float maxTime = 0.0f;
 
+		private List<WavefrontVertex> vertices = new List<WavefrontVertex>();
+		private List<WavefrontEdge> edges = new List<WavefrontEdge>();
+
 		public MotorcycleGraphGenerator(PolygonWavefront polygonWavefront)
 		{
-			this.polygonWavefront = polygonWavefront;
+			// first, we collect all existing vertices and edges from the wavefronts and throw them in a big bucket
+			int vertexOffset = 0;
+			int edgeOffset = 0;
+			for (int wavefrontIndex = 0; wavefrontIndex < polygonWavefront.wavefronts.Count; ++wavefrontIndex)
+			{
+				var wavefront = polygonWavefront.wavefronts[wavefrontIndex];
+				vertices.AddRange(wavefront.vertices);
+				/*for (int i = 0; i < wavefront.vertices.Length; ++i)
+				{
+					var vertex = vertices[vertexOffset + i];
+					vertex.prevEdgeIndex += edgeOffset;
+					vertex.nextEdgeIndex += edgeOffset;
+					vertices[vertexOffset + i] = vertex;
+				}*/
+
+				edges.AddRange(wavefront.edges);
+				for (int i = 0; i < wavefront.edges.Length; ++i)
+				{
+					var edge = edges[edgeOffset + i];
+					edges[vertexOffset + i] = new WavefrontEdge(edge.prevVertexIndex + vertexOffset, edge.nextVertexIndex + vertexOffset);
+				}
+
+				vertexOffset += wavefront.vertices.Length;
+				edgeOffset += wavefront.edges.Length;
+			}
 		}
 
 		public Motorcycle[] CalculateGraph()
@@ -41,32 +66,18 @@ namespace Briganti.StraightSkeletons
 		{
 			List<Motorcycle> motorcycles = new List<Motorcycle>();
 
-			// go over all contours and generate the motorcycles
-			GenerateMotorcyclesForContour(polygonWavefront.outerWavefront, motorcycles);
-			for (int i = 0; i < polygonWavefront.innerWavefronts.Count; ++i)
+			for (int i = 0; i < vertices.Count; ++i)
 			{
-				var innerWavefront = polygonWavefront.innerWavefronts[i];
-				GenerateMotorcyclesForContour(innerWavefront, motorcycles);
-			}
-
-			return motorcycles.ToArray();
-		}
-
-		private void GenerateMotorcyclesForContour(Wavefront wavefront, List<Motorcycle> motorcycles)
-		{
-			var vertices = wavefront.vertices;
-			for (int i = 0; i < vertices.Length; ++i)
-			{
-				//WavefrontVertex prev = vertices[(i - 1 + vertices.Length) % vertices.Length];
 				WavefrontVertex curr = vertices[i];
-				//WavefrontVertex next = vertices[(i + 1) % vertices.Length];
 
 				if (curr.type == WavefrontVertexType.Reflex)
 				{
-					Motorcycle motorcycle = new Motorcycle(0.0f, curr.pos, curr.velocity);
+					Motorcycle motorcycle = new Motorcycle(i, 0.0f, curr.pos, curr.velocity);
 					motorcycles.Add(motorcycle);
 				}
 			}
+
+			return motorcycles.ToArray();
 		}
 
 		private void CollideMotorcyclesWithPolygon()
@@ -79,22 +90,14 @@ namespace Briganti.StraightSkeletons
 
 		private void CollideMotorcycleWithPolygon(ref Motorcycle motorcycle)
 		{
-			CollideMotorcycleWithWavefront(ref motorcycle, polygonWavefront.outerWavefront.vertices);
-			for (int i = 0; i < polygonWavefront.innerWavefronts.Count; ++i)
-			{
-				CollideMotorcycleWithWavefront(ref motorcycle, polygonWavefront.innerWavefronts[i].vertices);
-			}
-		}
-
-		private void CollideMotorcycleWithWavefront(ref Motorcycle motorcycle, WavefrontVertex[] vertices)
-		{
 			float2 motorcyclePoint0 = motorcycle.startPoint;
 			float2 motorCyclePoint1 = motorcycle.startPoint + motorcycle.velocity;
 
-			for (int i = 0; i < vertices.Length; ++i)
+			for (int i = 0; i < edges.Count; ++i)
 			{
-				float2 edgePoint0 = vertices[i].pos;
-				float2 edgePoint1 = vertices[(i + 1) % vertices.Length].pos;
+				var edge = edges[i];
+				float2 edgePoint0 = vertices[edge.prevVertexIndex].pos;
+				float2 edgePoint1 = vertices[edge.nextVertexIndex].pos;
 
 				if (Geometry.GetLineIntersection(motorcyclePoint0, motorCyclePoint1, edgePoint0, edgePoint1, out float motorcycleTime, out float edgeTime))
 				{
@@ -105,7 +108,10 @@ namespace Briganti.StraightSkeletons
 						if (motorcycleTime > 0.001f)
 						{
 							motorcycleTime += motorcycle.startTime;
-							motorcycle.crashTime = Mathf.Min(motorcycle.crashTime, motorcycleTime);
+							if (motorcycleTime < motorcycle.crashTime)
+							{
+								motorcycle.UpdateCrash(MotorcycleCrashType.Wall, i, motorcycleTime);
+							}
 							maxTime = Mathf.Max(maxTime, motorcycle.crashTime);
 						}
 					}
@@ -124,11 +130,6 @@ namespace Briganti.StraightSkeletons
 
 			while (nUnprocessedMotorcycles > 0)
 			{
-				// flip the two lists
-				/*var newRealCrashes = crashes;
-				crashes = realCrashes;
-				realCrashes = newRealCrashes;
-				realCrashes.Clear();*/
 				crashes.Clear();
 				realCrashes.Clear();
 
@@ -204,7 +205,10 @@ namespace Briganti.StraightSkeletons
 					}
 
 					ref Motorcycle motorcycle = ref motorcycles[crash.motorcycleIndex];
-					motorcycle.crashTime = Mathf.Min(motorcycle.crashTime, crash.time);
+					if (crash.time < motorcycle.crashTime)
+					{
+						motorcycle.UpdateCrash(MotorcycleCrashType.Motorcycle, crash.motorcycleTraceIndex, crash.time);
+					}
 
 					realCrashes.Add(crash);
 				}
@@ -216,7 +220,6 @@ namespace Briganti.StraightSkeletons
 				int nRealCrashes = realCrashes.Count;
 				for (int i = 0; i < nRealCrashes - 1; ++i)
 				{
-
 					// crash at the same time & place
 					if (realCrashes[i].CompareTo(realCrashes[i + 1]) == 0)
 					{
@@ -226,40 +229,116 @@ namespace Briganti.StraightSkeletons
 					// we have a crash that is NOT at the same time & place - in that case, we see if we need to launch additional motorcycles
 					else
 					{
-						if (nSimultaneousCrashes > 1)
-						{
-							nUnprocessedMotorcycles += AddNewMotorcycles(realCrashes, i - nSimultaneousCrashes + 1, nSimultaneousCrashes, newMotorcycles);
-							nSimultaneousCrashes = 1;
-						}
+						nUnprocessedMotorcycles += ProcessCrashedMotorcycles(realCrashes, newMotorcycles, nSimultaneousCrashes, i);
+						nSimultaneousCrashes = 1;
 					}
 				}
 
-				// we might still have a simultaneous crash going at the end of the line
-				if (nSimultaneousCrashes > 1)
-				{
-					nUnprocessedMotorcycles += AddNewMotorcycles(realCrashes, realCrashes.Count - 1 - nSimultaneousCrashes + 1, nSimultaneousCrashes, newMotorcycles);
-				}
+				// we process the last batch of motorcycles
+				nUnprocessedMotorcycles += ProcessCrashedMotorcycles(realCrashes, newMotorcycles, nSimultaneousCrashes, realCrashes.Count - 1);
 
 				// append the new motorcycles to the old ones
-				Motorcycle[] allMororcycles = new Motorcycle[nMotorcycles + nUnprocessedMotorcycles];
-				Array.Copy(motorcycles, allMororcycles, nMotorcycles);
+				Motorcycle[] allMotorcycles = new Motorcycle[nMotorcycles + nUnprocessedMotorcycles];
+				Array.Copy(motorcycles, allMotorcycles, nMotorcycles);
 				for (int i = 0; i < newMotorcycles.Count; ++i)
 				{
-					allMororcycles[nMotorcycles + i] = newMotorcycles[i];
+					allMotorcycles[nMotorcycles + i] = newMotorcycles[i];
 
 					// make sure we also calculate wall collisions for these new motorcycles!
-					ref Motorcycle motorcycle = ref allMororcycles[nMotorcycles + i];
+					ref Motorcycle motorcycle = ref allMotorcycles[nMotorcycles + i];
 					CollideMotorcycleWithPolygon(ref motorcycle);
 				}
 
-				motorcycles = allMororcycles;
+				motorcycles = allMotorcycles;
 				nMotorcycles = motorcycles.Length;
+			}
+
+			// finally, we go over all motorcycles that crashed against a WALL, and create a new vertex at the wall - this might split up an edge!
+			// we already processed motorcycles that crashed against each other or a trace of another motorcycle
+			for (int i = 0; i < motorcycles.Length; ++i)
+			{
+				ref var motorcycle = ref motorcycles[i];
+				if (motorcycle.crashType == MotorcycleCrashType.Wall)
+				{
+					SplitEdgeAtCrashSite(motorcycle);
+				}
 			}
 		}
 
+		private int ProcessCrashedMotorcycles(List<MotorcycleCrash> realCrashes, List<Motorcycle> newMotorcycles, int nSimultaneousCrashes, int lastMotorcycleIndex)
+		{
+			// we add new edges for the trace of each motorcycle
+			int newVertexIndex = AddNewEdges(realCrashes, lastMotorcycleIndex - nSimultaneousCrashes + 1, nSimultaneousCrashes);
+
+			int nUnprocessedMotorcycles = 0;
+			if (nSimultaneousCrashes > 1)
+			{
+				nUnprocessedMotorcycles = AddNewMotorcycles(realCrashes, lastMotorcycleIndex - nSimultaneousCrashes + 1, nSimultaneousCrashes, newVertexIndex, newMotorcycles);
+			}
+
+			return nUnprocessedMotorcycles;
+		}
+
+		private int AddNewEdges(List<MotorcycleCrash> crashes, int startIndex, int nSimultaneousCrashes)
+		{
+			// firstly, we add a new vertex at the crash point - might be shared by multiple edges!
+			// velocity will be calculated later
+			MotorcycleCrash crash = crashes[startIndex];
+			WavefrontVertex crashVertex = new WavefrontVertex(crash.crashPos, float2.zero, WavefrontVertexType.SteinerResting);
+			vertices.Add(crashVertex);
+			int crashVertexIndex = vertices.Count - 1;
+
+			// we add a new edge for each crashed motorcycle
+			for (int i = startIndex; i < startIndex + nSimultaneousCrashes; ++i)
+			{
+				ref var motorcycle = ref motorcycles[crashes[i].motorcycleIndex];
+				WavefrontEdge newEdge = new WavefrontEdge(motorcycle.vertexIndex, crashVertexIndex);
+				edges.Add(newEdge);
+			}
+
+			return crashVertexIndex;
+		}
+
+		private void SplitEdgeAtCrashSite(in Motorcycle motorcycle)
+		{
+			if (motorcycle.crashType != MotorcycleCrashType.Wall) throw new ArgumentException($"Motorcycle {motorcycle} did not crash against a wall.");
+
+			WavefrontEdge crashEdge = edges[motorcycle.crashTargetIndex];
+			float2 crashPos = motorcycle.getCrashPos();
+			int startVertex = motorcycle.vertexIndex;
+
+			// get the start and endpoints of the crash edge
+			float2 p0 = vertices[crashEdge.prevVertexIndex].pos;
+			float2 p1 = vertices[crashEdge.nextVertexIndex].pos;
+
+			// if we crashed right into an endpoint of the edge, we don't need to create a new vertex
+			if (math.distance(p0, crashPos) < Geometry.EPS)
+			{
+				edges.Add(new WavefrontEdge(startVertex, crashEdge.prevVertexIndex));
+			}
+			else if (math.distance(p1, crashPos) < Geometry.EPS)
+			{
+				edges.Add(new WavefrontEdge(startVertex, crashEdge.nextVertexIndex));
+			}
+
+			// this is the complicated part - we need to split up the edge!
+			else
+			{
+				WavefrontVertex newCrashVertex = new WavefrontVertex(crashPos, float2.zero, WavefrontVertexType.SteinerMoving);
+				vertices.Add(newCrashVertex);
+				int newVertexIndex = vertices.Count - 1;
+
+				// first, add the motorcycle trace edge
+				edges.Add(new WavefrontEdge(startVertex, newVertexIndex));
+
+				// now, we repurpose the original edge (so we don't need to fuck with updating indices) to be one part of the new edge
+				edges[motorcycle.crashTargetIndex] = new WavefrontEdge(crashEdge.prevVertexIndex, newVertexIndex);
+				edges.Add(new WavefrontEdge(newVertexIndex, crashEdge.nextVertexIndex));
+			}
+		}
 
 		private List<Vector2> incomingMotorcycleDirs = new List<Vector2>();
-		private int AddNewMotorcycles(List<MotorcycleCrash> crashes, int startIndex, int nSimultaneousCrashes, List<Motorcycle> newMotorcycles)
+		private int AddNewMotorcycles(List<MotorcycleCrash> crashes, int startIndex, int nSimultaneousCrashes, int startVertexIndex, List<Motorcycle> newMotorcycles)
 		{
 			int nNewMotorcycles = 0;
 			float2 p = crashes[startIndex].crashPos;
@@ -277,7 +356,8 @@ namespace Briganti.StraightSkeletons
 			incomingMotorcycleDirs.Sort((dir1, dir2) => Geometry.GetAngle(dir1).CompareTo(Geometry.GetAngle(dir2)));
 
 			// now go over each couple, and see if there's a reflex angle between them - if there is, we launch a new motorcycle in the middle between them
-			for (int i = 0; i < incomingMotorcycleDirs.Count; ++i) {
+			for (int i = 0; i < incomingMotorcycleDirs.Count; ++i)
+			{
 				float2 dir0 = incomingMotorcycleDirs[i];
 				float2 dir1 = incomingMotorcycleDirs[(i + 1) % incomingMotorcycleDirs.Count];
 
@@ -289,7 +369,7 @@ namespace Briganti.StraightSkeletons
 				if (Geometry.IsRelfexVertex(prev, curr, next))
 				{
 					float2 newVelocity = Wavefront.CalculateVelocity(prev, curr, next);
-					var newMotorcycle = new Motorcycle(crashTime, p, newVelocity);
+					var newMotorcycle = new Motorcycle(startVertexIndex, crashTime, p, newVelocity);
 					newMotorcycles.Add(newMotorcycle);
 					++nNewMotorcycles;
 				}

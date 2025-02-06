@@ -14,6 +14,7 @@ namespace Briganti.StraightSkeletons
 	public class Wavefront
 	{
 		public readonly WavefrontVertex[] vertices;
+		public readonly WavefrontEdge[] edges;
 
 
 		public Wavefront(float2[] contour)
@@ -21,26 +22,21 @@ namespace Briganti.StraightSkeletons
 
 			// convert all vertices in the contour to wavefront vertices
 			vertices = new WavefrontVertex[contour.Length];
+			edges = new WavefrontEdge[contour.Length];
 			for (int i = 0; i < contour.Length; ++i)
 			{
 				float2 prev = contour[(i - 1 + contour.Length) % contour.Length];
 				float2 curr = contour[i];
 				float2 next = contour[(i + 1) % contour.Length];
 
-				/*float2 prevToCurr = curr - prev;
-				float2 nextToCurr = next - curr;
-
-				// rotate them 90°
-				float2 moveDir1 = math.normalize(Geometry.RotateMinus90Degrees(prevToCurr));
-				float2 moveDir2 = math.normalize(Geometry.RotateMinus90Degrees(nextToCurr));
-
-				float2 velocity = moveDir1 + moveDir2;
-				float speed = math.length(velocity);*/
-
 				float2 velocity = CalculateVelocity(prev, curr, next);
 
 				bool isReflex = Geometry.IsRelfexVertex(prev, curr, next);
-				vertices[i] = new WavefrontVertex(curr, velocity, isReflex ? WavefrontVertexType.Reflex : WavefrontVertexType.Convex);
+				int prevEdgeIndex = (i - 1 + contour.Length) % contour.Length;
+				int nextEdgeIndex = i;
+				vertices[i] = new WavefrontVertex(prevEdgeIndex, nextEdgeIndex, curr, velocity, isReflex ? WavefrontVertexType.Reflex : WavefrontVertexType.Convex);
+
+				edges[i] = new WavefrontEdge(i, i + 1);
 			}
 		}
 
