@@ -104,6 +104,7 @@ namespace Briganti.StraightSkeletons
 						// don't hit adjacent edges that we originate from - so we make sure that we have at least moved a LITTLE forward
 						if (motorcycleTime > 0.001f)
 						{
+							motorcycleTime += motorcycle.startTime;
 							motorcycle.crashTime = Mathf.Min(motorcycle.crashTime, motorcycleTime);
 							maxTime = Mathf.Max(maxTime, motorcycle.crashTime);
 						}
@@ -245,6 +246,10 @@ namespace Briganti.StraightSkeletons
 				for (int i = 0; i < newMotorcycles.Count; ++i)
 				{
 					allMororcycles[nMotorcycles + i] = newMotorcycles[i];
+
+					// make sure we also calculate wall collisions for these new motorcycles!
+					ref Motorcycle motorcycle = ref allMororcycles[nMotorcycles + i];
+					CollideMotorcycleWithPolygon(ref motorcycle);
 				}
 
 				motorcycles = allMororcycles;
