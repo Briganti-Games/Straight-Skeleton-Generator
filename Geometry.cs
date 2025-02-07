@@ -67,6 +67,7 @@ namespace Briganti.StraightSkeletons
 			return sum < 0;
 		}
 
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static float Det(float2 prev, float2 curr, float2 next)
 		{
 			float2 a = prev;
@@ -75,21 +76,25 @@ namespace Briganti.StraightSkeletons
 			return (b.x - a.x) * (c.y - b.y) - (c.x - b.x) * (b.y - a.y);
 		}
 
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static bool IsRelfexVertex(float2 prev, float2 curr, float2 next)
 		{
 			return Det(prev, curr, next) > 0;
 		}
 
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static float2 Rotate90Degrees(float2 v)
 		{
 			return new float2(-v.y, v.x);
 		}
 
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static float2 RotateMinus90Degrees(float2 v)
 		{
 			return new float2(v.y, -v.x);
 		}
 
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static float2 Rotate90Degrees(float2 v, bool positiveDirection)
 		{
 			if (positiveDirection)
@@ -102,9 +107,28 @@ namespace Briganti.StraightSkeletons
 			}
 		}
 
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static float GetAngle(float2 v)
 		{
 			return math.atan2(v.y, v.x);
+		}
+
+		// project a point on a line
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public static float2 ProjectPointOnLine(float2 p1, float2 p2, float2 p, out float t)
+		{
+			// http://paulbourke.net/geometry/pointline/
+
+			float2 p3 = p;
+			float u = ((p3.x - p1.x) * (p2.x - p1.x) + (p3.y - p1.y) * (p2.y - p1.y)) / math.lengthsq(p2 - p1);
+			float2 proj = new(p1.x + u * (p2.x - p1.x), p1.y + u * (p2.y - p1.y));
+			t = u;
+			return proj;
+		}
+
+		public static int2 RoundToInt(float2 v)
+		{
+			return new int2((int)math.round(v.x), (int)math.round(v.y));
 		}
 	}
 }

@@ -35,10 +35,5 @@ namespace Briganti.StraightSkeletons
 				wavefronts.Add(new Wavefront(polygonWithHoles.innerContours[i]));
 			}
 		}
-
-		public PolygonWavefront MergeWithMotorcycles(Motorcycle[] motorcycles)
-		{
-
-		}
 	}
 }

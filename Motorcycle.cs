@@ -19,7 +19,7 @@ namespace Briganti.StraightSkeletons
 
 	public struct Motorcycle
 	{
-		public int vertexIndex;
+		public readonly int startVertexIndex;
 
 		public float startTime;
 		public readonly float2 startPoint;
@@ -29,9 +29,12 @@ namespace Briganti.StraightSkeletons
 		public MotorcycleCrashType crashType { get; private set; }
 		public int crashTargetIndex { get; private set; }
 
-		public Motorcycle(int vertexIndex, float startTime, float2 startPoint, float2 velocity)
+		public int? stopVertexIndex;
+		public int edgeIndex;
+
+		public Motorcycle(int startVertexIndex, float startTime, float2 startPoint, float2 velocity)
 		{
-			this.vertexIndex = vertexIndex;
+			this.startVertexIndex = startVertexIndex;
 			this.startTime = startTime;
 			this.startPoint = startPoint;
 			this.velocity = velocity;
@@ -39,6 +42,9 @@ namespace Briganti.StraightSkeletons
 			this.crashType = MotorcycleCrashType.Escaped;
 			this.crashTime = float.MaxValue;
 			this.crashTargetIndex = 0;
+
+			stopVertexIndex = null;
+			edgeIndex = -1;
 		}
 
 		public void UpdateCrash(MotorcycleCrashType crashType, int crashTargetIndex, float crashTime)

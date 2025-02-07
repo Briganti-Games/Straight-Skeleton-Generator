@@ -15,6 +15,8 @@ namespace Briganti.StraightSkeletons
 		private float maxTime = 0.0f;
 
 		private List<WavefrontVertex> vertices = new List<WavefrontVertex>();
+		private Dictionary<WavefrontVertex, int> vertexIndices = new Dictionary<WavefrontVertex, int>();
+
 		private List<WavefrontEdge> edges = new List<WavefrontEdge>();
 
 		public MotorcycleGraphGenerator(PolygonWavefront polygonWavefront)
@@ -25,28 +27,34 @@ namespace Briganti.StraightSkeletons
 			for (int wavefrontIndex = 0; wavefrontIndex < polygonWavefront.wavefronts.Count; ++wavefrontIndex)
 			{
 				var wavefront = polygonWavefront.wavefronts[wavefrontIndex];
-				vertices.AddRange(wavefront.vertices);
-				/*for (int i = 0; i < wavefront.vertices.Length; ++i)
+				foreach (WavefrontVertex vertex in wavefront.vertices)
 				{
-					var vertex = vertices[vertexOffset + i];
-					vertex.prevEdgeIndex += edgeOffset;
-					vertex.nextEdgeIndex += edgeOffset;
-					vertices[vertexOffset + i] = vertex;
-				}*/
-
-				edges.AddRange(wavefront.edges);
-				for (int i = 0; i < wavefront.edges.Length; ++i)
-				{
-					var edge = edges[edgeOffset + i];
-					edges[vertexOffset + i] = new WavefrontEdge(edge.prevVertexIndex + vertexOffset, edge.nextVertexIndex + vertexOffset);
+					AddVertex(vertex);
 				}
 
-				vertexOffset += wavefront.vertices.Length;
-				edgeOffset += wavefront.edges.Length;
+				for (int i = 0; i < wavefront.edges.Count; ++i)
+				{
+					var edge = wavefront.edges[i];
+					edges.Add(new WavefrontEdge(edge.prevVertexIndex + vertexOffset, edge.nextVertexIndex + vertexOffset));
+				}
+
+				vertexOffset += wavefront.vertices.Count;
+				edgeOffset += wavefront.edges.Count;
 			}
 		}
 
-		public Motorcycle[] CalculateGraph()
+		private int AddVertex(WavefrontVertex vertex)
+		{
+			if (!vertexIndices.TryGetValue(vertex, out int vertexIndex))
+			{
+				vertexIndex = vertices.Count;
+				vertices.Add(vertex);
+				vertexIndices[vertex] = vertexIndex;
+			}
+			return vertexIndex;
+		}
+
+		public Wavefront CalculateWavefrontWithMotorcycles()
 		{
 
 			// first, we generate motorcycles from all reflex angles
@@ -59,7 +67,7 @@ namespace Briganti.StraightSkeletons
 			CollideWithOtherMotorcycles();
 
 			// all done!
-			return motorcycles;
+			return new Wavefront(vertices, edges);
 		}
 
 		private Motorcycle[] GenerateMotorcycles()
@@ -152,7 +160,7 @@ namespace Briganti.StraightSkeletons
 							float time1 = motorcycle1.startTime + t1;
 
 							// we only move forward
-							if (motorcycle0.startTime < time0 && time0 <= motorcycle0.crashTime && motorcycle1.startTime < time1 && time1 <= motorcycle1.crashTime)
+							if (motorcycle0.startTime < time0 && time0 < motorcycle0.crashTime && motorcycle1.startTime < time1 && time1 < motorcycle1.crashTime)
 							{
 								// we crash at the exact same time - both crashes are added
 								if (Mathf.Abs(time0 - time1) < Geometry.EPS)
@@ -229,13 +237,18 @@ namespace Briganti.StraightSkeletons
 					// we have a crash that is NOT at the same time & place - in that case, we see if we need to launch additional motorcycles
 					else
 					{
-						nUnprocessedMotorcycles += ProcessCrashedMotorcycles(realCrashes, newMotorcycles, nSimultaneousCrashes, i);
+						nUnprocessedMotorcycles += AddNewMotorcycles(realCrashes, i, nSimultaneousCrashes, newMotorcycles);
+						//nUnprocessedMotorcycles += ProcessCrashedMotorcycles(realCrashes, newMotorcycles, nSimultaneousCrashes, i);
 						nSimultaneousCrashes = 1;
 					}
 				}
 
-				// we process the last batch of motorcycles
-				nUnprocessedMotorcycles += ProcessCrashedMotorcycles(realCrashes, newMotorcycles, nSimultaneousCrashes, realCrashes.Count - 1);
+				// we process the last batch of crashed motorcycles
+				if (nSimultaneousCrashes > 1)
+				{
+					nUnprocessedMotorcycles += AddNewMotorcycles(realCrashes, nRealCrashes - 1, nSimultaneousCrashes, newMotorcycles);
+					//nUnprocessedMotorcycles += ProcessCrashedMotorcycles(realCrashes, newMotorcycles, nSimultaneousCrashes, realCrashes.Count - 1);
+				}
 
 				// append the new motorcycles to the old ones
 				Motorcycle[] allMotorcycles = new Motorcycle[nMotorcycles + nUnprocessedMotorcycles];
@@ -253,96 +266,116 @@ namespace Briganti.StraightSkeletons
 				nMotorcycles = motorcycles.Length;
 			}
 
-			// finally, we go over all motorcycles that crashed against a WALL, and create a new vertex at the wall - this might split up an edge!
-			// we already processed motorcycles that crashed against each other or a trace of another motorcycle
+			// now that we have all the final motorcycles and their crash traces, we add vertices edges for them
+			for (int i = 0; i < motorcycles.Length; ++i)
+			{
+				AddEdgeForMotorcycle(ref motorcycles[i]);
+			}
+
+			// finally, we go over all motorcycles and see if we need to split up the edge (motorcycle trace or wall) we crashed against
 			for (int i = 0; i < motorcycles.Length; ++i)
 			{
 				ref var motorcycle = ref motorcycles[i];
-				if (motorcycle.crashType == MotorcycleCrashType.Wall)
-				{
-					SplitEdgeAtCrashSite(motorcycle);
-				}
+				CreateSplitVertexAtCrashSite(motorcycle);
 			}
-		}
 
-		private int ProcessCrashedMotorcycles(List<MotorcycleCrash> realCrashes, List<Motorcycle> newMotorcycles, int nSimultaneousCrashes, int lastMotorcycleIndex)
-		{
-			// we add new edges for the trace of each motorcycle
-			int newVertexIndex = AddNewEdges(realCrashes, lastMotorcycleIndex - nSimultaneousCrashes + 1, nSimultaneousCrashes);
-
-			int nUnprocessedMotorcycles = 0;
-			if (nSimultaneousCrashes > 1)
+			// we now split up the edges that need to be split
+			List<WavefrontEdge> newEdges = new List<WavefrontEdge>();
+			for (int i = 0; i < edges.Count; ++i)
 			{
-				nUnprocessedMotorcycles = AddNewMotorcycles(realCrashes, lastMotorcycleIndex - nSimultaneousCrashes + 1, nSimultaneousCrashes, newVertexIndex, newMotorcycles);
+				SplitEdgeIfNecessary(newEdges, edges[i]);
 			}
-
-			return nUnprocessedMotorcycles;
 		}
 
-		private int AddNewEdges(List<MotorcycleCrash> crashes, int startIndex, int nSimultaneousCrashes)
+		private void AddEdgeForMotorcycle(ref Motorcycle motorcycle)
 		{
-			// firstly, we add a new vertex at the crash point - might be shared by multiple edges!
-			// velocity will be calculated later
-			MotorcycleCrash crash = crashes[startIndex];
-			WavefrontVertex crashVertex = new WavefrontVertex(crash.crashPos, float2.zero, WavefrontVertexType.SteinerResting);
-			vertices.Add(crashVertex);
-			int crashVertexIndex = vertices.Count - 1;
-
-			// we add a new edge for each crashed motorcycle
-			for (int i = startIndex; i < startIndex + nSimultaneousCrashes; ++i)
+			// if there is already one (the case for multi crashes), we don't do anything
+			if (!motorcycle.stopVertexIndex.HasValue)
 			{
-				ref var motorcycle = ref motorcycles[crashes[i].motorcycleIndex];
-				WavefrontEdge newEdge = new WavefrontEdge(motorcycle.vertexIndex, crashVertexIndex);
-				edges.Add(newEdge);
+
+				// otherwise, create a crash vertex here
+				// this might actually reuse an existing vertex if we hit a point where a vertex already exists
+				WavefrontVertex vertex = new WavefrontVertex(motorcycle.getCrashPos(), float2.zero, WavefrontVertexType.SteinerResting);
+				int newVertexIndex = AddVertex(vertex);
+				motorcycle.stopVertexIndex = newVertexIndex;
 			}
 
-			return crashVertexIndex;
+			// we now add the edge
+			motorcycle.edgeIndex = edges.Count;
+			edges.Add(new WavefrontEdge(motorcycle.startVertexIndex, motorcycle.stopVertexIndex.Value));
 		}
 
-		private void SplitEdgeAtCrashSite(in Motorcycle motorcycle)
+		private WavefrontEdge GetCrashEdge(in Motorcycle motorcycle)
 		{
-			if (motorcycle.crashType != MotorcycleCrashType.Wall) throw new ArgumentException($"Motorcycle {motorcycle} did not crash against a wall.");
+			switch (motorcycle.crashType)
+			{
+				case MotorcycleCrashType.Motorcycle:
+					ref Motorcycle traceMotorcycle = ref motorcycles[motorcycle.crashTargetIndex];
+					if (traceMotorcycle.edgeIndex == -1) throw new ArgumentException($"Motorcycle {traceMotorcycle} does not have an edge associated with it yet!");
+					return edges[traceMotorcycle.edgeIndex];
 
-			WavefrontEdge crashEdge = edges[motorcycle.crashTargetIndex];
+				case MotorcycleCrashType.Wall:
+					return edges[motorcycle.crashTargetIndex];
+
+				default:
+					return null;
+			}
+		}
+
+		private void CreateSplitVertexAtCrashSite(in Motorcycle motorcycle)
+		{
+			if (!motorcycle.stopVertexIndex.HasValue) throw new ArgumentException($"At this point, each motorcycle must have a stop vertex index defined.");
+
+			WavefrontEdge crashEdge = GetCrashEdge(motorcycle);
 			float2 crashPos = motorcycle.getCrashPos();
-			int startVertex = motorcycle.vertexIndex;
 
 			// get the start and endpoints of the crash edge
 			float2 p0 = vertices[crashEdge.prevVertexIndex].pos;
 			float2 p1 = vertices[crashEdge.nextVertexIndex].pos;
 
+			// get the point at which we hit the edge
+			float2 projCrashPos = Geometry.ProjectPointOnLine(p0, p1, crashPos, out float t);
+
+			// sanity check
+			if (Vector2.Distance(projCrashPos, crashPos) > Geometry.EPS) throw new ArgumentException($"The calculated crash pos {crashPos} is not at all part of the edge {crashEdge}!");
+
 			// if we crashed right into an endpoint of the edge, we don't need to create a new vertex
-			if (math.distance(p0, crashPos) < Geometry.EPS)
+			if (t <= Geometry.EPS)
 			{
-				edges.Add(new WavefrontEdge(startVertex, crashEdge.prevVertexIndex));
+				var crashVertex = vertices[crashEdge.prevVertexIndex];
+				crashVertex.type = WavefrontVertexType.ConvexMulti;
+				vertices[crashEdge.prevVertexIndex] = crashVertex;
 			}
-			else if (math.distance(p1, crashPos) < Geometry.EPS)
+			else if (t >= 1.0f - Geometry.EPS)
 			{
-				edges.Add(new WavefrontEdge(startVertex, crashEdge.nextVertexIndex));
+				var crashVertex = vertices[crashEdge.nextVertexIndex];
+				crashVertex.type = WavefrontVertexType.ConvexMulti;
+				vertices[crashEdge.nextVertexIndex] = crashVertex;
 			}
 
 			// this is the complicated part - we need to split up the edge!
 			else
 			{
-				WavefrontVertex newCrashVertex = new WavefrontVertex(crashPos, float2.zero, WavefrontVertexType.SteinerMoving);
-				vertices.Add(newCrashVertex);
-				int newVertexIndex = vertices.Count - 1;
-
-				// first, add the motorcycle trace edge
-				edges.Add(new WavefrontEdge(startVertex, newVertexIndex));
-
-				// now, we repurpose the original edge (so we don't need to fuck with updating indices) to be one part of the new edge
-				edges[motorcycle.crashTargetIndex] = new WavefrontEdge(crashEdge.prevVertexIndex, newVertexIndex);
-				edges.Add(new WavefrontEdge(newVertexIndex, crashEdge.nextVertexIndex));
+				// remember that we need to split this edge at this point
+				int splitVertexIndex = motorcycle.stopVertexIndex.Value;
+				WavefrontEdgeSplitPoint splitPoint = new WavefrontEdgeSplitPoint(splitVertexIndex, t);
+				if (crashEdge.splitPoints == null) crashEdge.splitPoints = new List<WavefrontEdgeSplitPoint>();
+				crashEdge.splitPoints.Add(splitPoint);
 			}
 		}
 
 		private List<Vector2> incomingMotorcycleDirs = new List<Vector2>();
-		private int AddNewMotorcycles(List<MotorcycleCrash> crashes, int startIndex, int nSimultaneousCrashes, int startVertexIndex, List<Motorcycle> newMotorcycles)
+		private int AddNewMotorcycles(List<MotorcycleCrash> crashes, int lastIndex, int nSimultaneousCrashes, List<Motorcycle> newMotorcycles)
 		{
+			// no simultaneous crash - nothing happens
+			if (nSimultaneousCrashes <= 1) return 0;
+
+			int startIndex = lastIndex - nSimultaneousCrashes + 1;
+
 			int nNewMotorcycles = 0;
 			float2 p = crashes[startIndex].crashPos;
 			float crashTime = crashes[startIndex].time;
+			int firstCrashedMotorcycleIndex = crashes[startIndex].motorcycleIndex;
 
 			// collect and sort all incoming motorcycles
 			incomingMotorcycleDirs.Clear();
@@ -355,11 +388,19 @@ namespace Briganti.StraightSkeletons
 			// sort them by angle, counter-clockwise
 			incomingMotorcycleDirs.Sort((dir1, dir2) => Geometry.GetAngle(dir1).CompareTo(Geometry.GetAngle(dir2)));
 
+			// we create a new vertex here that we will assign as endpoint to the crashed motorcycles, and as start point to the new ones
+			int newVertexIndex = AddVertex(new WavefrontVertex(p, float2.zero, WavefrontVertexType.SteinerMulti));
+			for (int i = startIndex; i < startIndex + nSimultaneousCrashes; ++i)
+			{
+				ref var motorcycle = ref motorcycles[crashes[i].motorcycleIndex];
+				motorcycle.stopVertexIndex = newVertexIndex;
+			}
+
 			// now go over each couple, and see if there's a reflex angle between them - if there is, we launch a new motorcycle in the middle between them
 			for (int i = 0; i < incomingMotorcycleDirs.Count; ++i)
 			{
 				float2 dir0 = incomingMotorcycleDirs[i];
-				float2 dir1 = incomingMotorcycleDirs[(i + 1) % incomingMotorcycleDirs.Count];
+				float2 dir1 = incomingMotorcycleDirs[(i - 1 + incomingMotorcycleDirs.Count) % incomingMotorcycleDirs.Count];
 
 				float2 prev = p - dir1;
 				float2 curr = p;
@@ -369,13 +410,37 @@ namespace Briganti.StraightSkeletons
 				if (Geometry.IsRelfexVertex(prev, curr, next))
 				{
 					float2 newVelocity = Wavefront.CalculateVelocity(prev, curr, next);
-					var newMotorcycle = new Motorcycle(startVertexIndex, crashTime, p, newVelocity);
+					var newMotorcycle = new Motorcycle(newVertexIndex, crashTime, p, newVelocity);
 					newMotorcycles.Add(newMotorcycle);
 					++nNewMotorcycles;
 				}
 			}
 
 			return nNewMotorcycles;
+		}
+
+		private void SplitEdgeIfNecessary(List<WavefrontEdge> newEdges, WavefrontEdge edge)
+		{
+			// nothing changed
+			if (edge.splitPoints == null)
+			{
+				newEdges.Add(edge);
+				return;
+			}
+
+			// we now first sort the split points based on their projection
+			edge.splitPoints.Sort();
+
+			// then add the different parts and forget the original edge
+			int prevVertexIndex = edge.prevVertexIndex;
+			for (int i = 0; i < edge.splitPoints.Count; ++i)
+			{
+				int nextVertexIndex = edge.splitPoints[i].index;
+				WavefrontEdge newEdge = new WavefrontEdge(prevVertexIndex, nextVertexIndex);
+				newEdges.Add(newEdge);
+				prevVertexIndex = nextVertexIndex;
+			}
+			newEdges.Add(new WavefrontEdge(prevVertexIndex, edge.nextVertexIndex));
 
 		}
 	}

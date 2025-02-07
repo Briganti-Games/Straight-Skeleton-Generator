@@ -13,16 +13,22 @@ namespace Briganti.StraightSkeletons
 {
 	public class Wavefront
 	{
-		public readonly WavefrontVertex[] vertices;
-		public readonly WavefrontEdge[] edges;
+		public readonly List<WavefrontVertex> vertices;
+		public readonly List<WavefrontEdge> edges;
 
+
+		public Wavefront(List<WavefrontVertex> vertices, List<WavefrontEdge> edges)
+		{
+			this.vertices = vertices;
+			this.edges = edges;
+		}
 
 		public Wavefront(float2[] contour)
 		{
 
 			// convert all vertices in the contour to wavefront vertices
-			vertices = new WavefrontVertex[contour.Length];
-			edges = new WavefrontEdge[contour.Length];
+			vertices = new List<WavefrontVertex>(contour.Length);
+			edges = new List<WavefrontEdge>(contour.Length);
 			for (int i = 0; i < contour.Length; ++i)
 			{
 				float2 prev = contour[(i - 1 + contour.Length) % contour.Length];
@@ -34,9 +40,8 @@ namespace Briganti.StraightSkeletons
 				bool isReflex = Geometry.IsRelfexVertex(prev, curr, next);
 				int prevEdgeIndex = (i - 1 + contour.Length) % contour.Length;
 				int nextEdgeIndex = i;
-				vertices[i] = new WavefrontVertex(prevEdgeIndex, nextEdgeIndex, curr, velocity, isReflex ? WavefrontVertexType.Reflex : WavefrontVertexType.Convex);
-
-				edges[i] = new WavefrontEdge(i, i + 1);
+				vertices.Add(new WavefrontVertex(curr, velocity, isReflex ? WavefrontVertexType.Reflex : WavefrontVertexType.Convex));
+				edges.Add(new WavefrontEdge(i, (i + 1) % contour.Length));
 			}
 		}
 
