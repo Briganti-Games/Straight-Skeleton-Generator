@@ -40,6 +40,26 @@ namespace Briganti.StraightSkeletons
 			return true;
 		}
 
+		public static bool IsParallelLines(float2 p0, float2 p1, float2 q0, float2 q1)
+		{
+			// http://stackoverflow.com/questions/563198/how-do-you-detect-where-two-line-segments-intersect
+
+			// calculate the direction vectors
+			float2 r = p1 - p0;
+			float2 s = q1 - q0;
+
+			// calculate the 2D cross product between the dir vectors
+			float dirCross = Cross2D(r, s);
+
+			// no intersection - they are colinear or parallel
+			if (math.abs(dirCross) < math.EPSILON)
+			{
+				return true;
+			}
+
+			return false;
+		}
+
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static float Cross2D(float2 v, float2 w)
 		{
@@ -111,6 +131,27 @@ namespace Briganti.StraightSkeletons
 		public static float GetAngle(float2 v)
 		{
 			return math.atan2(v.y, v.x);
+		}
+
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public static float Angle(float2 from, float2 to)
+		{
+			// sqrt(a) * sqrt(b) = sqrt(a * b) -- valid for real numbers
+			float denominator = (float)math.sqrt(math.lengthsq(from) * math.lengthsq(to));
+			if (denominator < EPS)
+				return 0F;
+
+			float dot = math.clamp(math.dot(from, to) / denominator, -1F, 1F);
+			return (float)Math.Acos(dot);
+		}
+
+		// Returns the signed angle in degrees between /from/ and /to/. Always returns the smallest possible angle
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public static float SignedAngle(float2 from, float2 to)
+		{
+			float unsigned_angle = Angle(from, to);
+			float sign = math.sign(from.x * to.y - from.y * to.x);
+			return unsigned_angle * sign;
 		}
 
 		// project a point on a line

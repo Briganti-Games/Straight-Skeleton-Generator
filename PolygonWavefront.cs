@@ -14,10 +14,10 @@ namespace Briganti.StraightSkeletons
 	{
 		public readonly PolygonWithHoles polygonWithHoles;
 
-		public WavefrontVertex[] vertices;
+		public Vertex[] vertices;
 
 
-		public List<Wavefront> wavefronts = new List<Wavefront>();
+		public List<VertexGraph> wavefronts = new List<VertexGraph>();
 
 
 		public PolygonWavefront(PolygonWithHoles polygonWithHoles)
@@ -26,13 +26,13 @@ namespace Briganti.StraightSkeletons
 
 			// make sure the outer contour is clockwise and the inner oners counter clockwise
 			if (Geometry.IsCounterClockwise2D(polygonWithHoles.outerContour)) throw new ArgumentException($"The outer contour is not defined clockwise!");
-			wavefronts.Add(new Wavefront(polygonWithHoles.outerContour));
+			wavefronts.Add(new VertexGraph(polygonWithHoles.outerContour));
 
 			for (int i = 0; i < polygonWithHoles.innerContours.Count; ++i)
 			{
 				var innerContour = polygonWithHoles.innerContours[i];
 				if (!Geometry.IsCounterClockwise2D(innerContour)) throw new ArgumentException($"Inner contour {i} is not defined counter-clockwise.");
-				wavefronts.Add(new Wavefront(polygonWithHoles.innerContours[i]));
+				wavefronts.Add(new VertexGraph(polygonWithHoles.innerContours[i]));
 			}
 		}
 	}

@@ -14,7 +14,7 @@ namespace Briganti.StraightSkeletons
 	{
 		Convex,
 		Reflex,
-		ConvexMulti,
+		ConvexAndSteiner,
 		SteinerMoving,
 		SteinerResting,
 		SteinerMulti
@@ -22,9 +22,5 @@ namespace Briganti.StraightSkeletons
 
 	public static class WavefrontVertexTypeExtensions
 	{
-		public static bool IsMoving(this WavefrontVertexType type)
-		{
-			return type != WavefrontVertexType.SteinerResting && type != WavefrontVertexType.SteinerMulti;
-		}
 	}
 }
