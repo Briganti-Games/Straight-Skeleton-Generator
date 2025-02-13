@@ -10,20 +10,19 @@ using UnityEngine.UI;
 
 namespace Briganti.StraightSkeletonGeneration
 {
-	public struct Edge
+	public struct EdgeEvent
 	{
-		public readonly int prevVertexIndex, nextVertexIndex;
+		public int queueId;
 
+		public float2 prevVertexVelocity;
 
-		public Edge(int prevVertexIndex, int nextVertexIndex)
-		{
-			this.prevVertexIndex = prevVertexIndex;
-			this.nextVertexIndex = nextVertexIndex;
-		}
+		public EventType eventType;
+		public float eventTime;
+		public float2 eventPos;
 
 		public override string ToString()
 		{
-			return $"Edge from vertices {prevVertexIndex} to {nextVertexIndex}";
+			return $"Edge event of type {eventType} at time {eventTime} and pos {eventPos}";
 		}
 	}
 }

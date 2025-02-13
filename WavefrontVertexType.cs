@@ -8,19 +8,12 @@ using UnityEngine.Profiling;
 using UnityEngine.Rendering;
 using UnityEngine.UI;
 
-namespace Briganti.StraightSkeletons
+namespace Briganti.StraightSkeletonGeneration
 {
 	public enum WavefrontVertexType
 	{
+		Unknown,
 		Convex,
-		Reflex,
-		ConvexAndSteiner,
-		SteinerMoving,
-		SteinerResting,
-		SteinerMulti
-	}
-
-	public static class WavefrontVertexTypeExtensions
-	{
+		Reflex
 	}
 }

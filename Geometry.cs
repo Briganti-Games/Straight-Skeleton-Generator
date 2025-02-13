@@ -9,7 +9,7 @@ using UnityEngine.Profiling;
 using UnityEngine.Rendering;
 using UnityEngine.UI;
 
-namespace Briganti.StraightSkeletons
+namespace Briganti.StraightSkeletonGeneration
 {
 	public class Geometry
 	{

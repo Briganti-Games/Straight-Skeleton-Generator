@@ -8,8 +8,15 @@ using UnityEngine.Profiling;
 using UnityEngine.Rendering;
 using UnityEngine.UI;
 
-namespace Briganti.StraightSkeletons
+namespace Briganti.StraightSkeletonGeneration
 {
+	public enum EventType
+	{
+		None,
+		Edge,
+		Split,
+	}
+
 	public struct WavefrontVertexKey : IEquatable<WavefrontVertexKey>
 	{
 		public readonly float2 pos;
@@ -40,41 +47,16 @@ namespace Briganti.StraightSkeletons
 
 	public struct Vertex
 	{
-		public float2 pos => key.pos;
-		public readonly float2 velocity;
-		public WavefrontVertexType type;
-		public readonly List<Edge> adjacentEdges;
+		public float2 pos;
 
-		public readonly WavefrontVertexKey key;
-
-
-
-		public Vertex(float2 pos, float2 velocity, WavefrontVertexType type)
+		public Vertex(float2 pos)
 		{
-			key = new WavefrontVertexKey(pos);
-			this.velocity = velocity;
-			this.type = type;
-			this.adjacentEdges = new List<Edge>();
-		}
-
-		public bool IsMoving()
-		{
-			return type != WavefrontVertexType.SteinerResting && type != WavefrontVertexType.SteinerMulti;
-		}
-
-		public bool IsWavefrontVertex()
-		{
-			return type == WavefrontVertexType.Convex || type == WavefrontVertexType.ConvexAndSteiner || type == WavefrontVertexType.Reflex || type == WavefrontVertexType.SteinerMoving;
-		}
-
-		public bool HasVelocity()
-		{
-			return math.lengthsq(velocity) > Geometry.EPS * Geometry.EPS;
+			this.pos = pos;
 		}
 
 		public override string ToString()
 		{
-			return $"Vertex {type} at {pos} moving at velocity {velocity}";
+			return $"{pos}";
 		}
 	}
 }
