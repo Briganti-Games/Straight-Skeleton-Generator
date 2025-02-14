@@ -18,7 +18,11 @@ namespace Briganti.StraightSkeletons.Priority_Queue
 			public float Priority;
 			public int QueueIndex;
 			public int Id;
-			public bool InQueue;
+
+			public override string ToString()
+			{
+				return $"Node at {QueueIndex} with priority {Priority} and id {Id}";
+			}
 		}
 
 		private int _maxNodes;
@@ -52,6 +56,11 @@ namespace Briganti.StraightSkeletons.Priority_Queue
 
 			_availableIds = new List<int>();
 			_availableIds.AddRange(Enumerable.Range(0, maxNodes));
+
+			for (int i = 0; i < _queueIndexById.Length; ++i)
+			{
+				_queueIndexById[i] = -1;
+			}
 		}
 
 		/// <summary>
@@ -92,11 +101,6 @@ namespace Briganti.StraightSkeletons.Priority_Queue
 
 			_availableIds.Clear();
 			_availableIds.AddRange(Enumerable.Range(0, _maxNodes));
-
-			for (int i = 0; i < _maxNodes + 1; ++i)
-			{
-				_nodes[i].InQueue = false;
-			}
 		}
 
 		/// <summary>
@@ -110,15 +114,7 @@ namespace Briganti.StraightSkeletons.Priority_Queue
 		public bool Contains(int nodeId)
 		{
 			int queueIndex = _queueIndexById[nodeId];
-			ref var node = ref _nodes[queueIndex];
-#if DEBUG
-			if (node.QueueIndex < 0 || node.QueueIndex >= _nodes.Length)
-			{
-				throw new InvalidOperationException("node.QueueIndex has been corrupted. Did you change it manually? Or add this node to another queue?");
-			}
-#endif
-
-			return node.InQueue;
+			return queueIndex != -1;
 		}
 
 		/// <summary>
@@ -147,7 +143,6 @@ namespace Briganti.StraightSkeletons.Priority_Queue
 			node.Priority = priority;
 			node.QueueIndex = _numNodes;
 			node.Id = nodeId;
-			node.InQueue = true;
 			_queueIndexById[nodeId] = node.QueueIndex;
 			CascadeUp(node);
 		}
@@ -230,10 +225,8 @@ namespace Briganti.StraightSkeletons.Priority_Queue
 				// Check if there is a right child. If not, swap and finish.
 				if (childRightIndex > _numNodes)
 				{
-					node.QueueIndex = childLeftIndex;
-					childLeft.QueueIndex = finalQueueIndex;
-					_nodes[finalQueueIndex] = childLeft;
-					_nodes[childLeftIndex] = node;
+					UpdateQueueIndex(node, childLeftIndex);
+					UpdateQueueIndex(childLeft, finalQueueIndex);
 					return;
 				}
 				// Check if the left-child is higher-priority than the right-child
@@ -241,15 +234,13 @@ namespace Briganti.StraightSkeletons.Priority_Queue
 				if (HasHigherPriority(childLeft, childRight))
 				{
 					// left is highest, move it up and continue
-					childLeft.QueueIndex = finalQueueIndex;
-					_nodes[finalQueueIndex] = childLeft;
+					UpdateQueueIndex(childLeft, finalQueueIndex);
 					finalQueueIndex = childLeftIndex;
 				}
 				else
 				{
 					// right is even higher, move it up and continue
-					childRight.QueueIndex = finalQueueIndex;
-					_nodes[finalQueueIndex] = childRight;
+					UpdateQueueIndex(childRight, finalQueueIndex);
 					finalQueueIndex = childRightIndex;
 				}
 			}
@@ -264,8 +255,7 @@ namespace Briganti.StraightSkeletons.Priority_Queue
 				Node childRight = _nodes[childRightIndex];
 				if (HasHigherPriority(childRight, node))
 				{
-					childRight.QueueIndex = finalQueueIndex;
-					_nodes[finalQueueIndex] = childRight;
+					UpdateQueueIndex(childRight, finalQueueIndex);
 					finalQueueIndex = childRightIndex;
 				}
 				// Neither child is higher-priority than current, so finish and stop.
@@ -282,8 +272,7 @@ namespace Briganti.StraightSkeletons.Priority_Queue
 				// If leaf node, we're done
 				if (childLeftIndex > _numNodes)
 				{
-					node.QueueIndex = finalQueueIndex;
-					_nodes[finalQueueIndex] = node;
+					UpdateQueueIndex(node, finalQueueIndex);
 					break;
 				}
 
@@ -295,10 +284,8 @@ namespace Briganti.StraightSkeletons.Priority_Queue
 					// Check if there is a right child. If not, swap and finish.
 					if (childRightIndex > _numNodes)
 					{
-						node.QueueIndex = childLeftIndex;
-						childLeft.QueueIndex = finalQueueIndex;
-						_nodes[finalQueueIndex] = childLeft;
-						_nodes[childLeftIndex] = node;
+						UpdateQueueIndex(node, childLeftIndex);
+						UpdateQueueIndex(childLeft, finalQueueIndex);
 						break;
 					}
 					// Check if the left-child is higher-priority than the right-child
@@ -306,23 +293,20 @@ namespace Briganti.StraightSkeletons.Priority_Queue
 					if (HasHigherPriority(childLeft, childRight))
 					{
 						// left is highest, move it up and continue
-						childLeft.QueueIndex = finalQueueIndex;
-						_nodes[finalQueueIndex] = childLeft;
+						UpdateQueueIndex(childLeft, finalQueueIndex);
 						finalQueueIndex = childLeftIndex;
 					}
 					else
 					{
 						// right is even higher, move it up and continue
-						childRight.QueueIndex = finalQueueIndex;
-						_nodes[finalQueueIndex] = childRight;
+						UpdateQueueIndex(childRight, finalQueueIndex);
 						finalQueueIndex = childRightIndex;
 					}
 				}
 				// Not swapping with left-child, does right-child exist?
 				else if (childRightIndex > _numNodes)
 				{
-					node.QueueIndex = finalQueueIndex;
-					_nodes[finalQueueIndex] = node;
+					UpdateQueueIndex(node, finalQueueIndex);
 					break;
 				}
 				else
@@ -331,15 +315,13 @@ namespace Briganti.StraightSkeletons.Priority_Queue
 					Node childRight = _nodes[childRightIndex];
 					if (HasHigherPriority(childRight, node))
 					{
-						childRight.QueueIndex = finalQueueIndex;
-						_nodes[finalQueueIndex] = childRight;
+						UpdateQueueIndex(childRight, finalQueueIndex);
 						finalQueueIndex = childRightIndex;
 					}
 					// Neither child is higher-priority than current, so finish and stop.
 					else
 					{
-						node.QueueIndex = finalQueueIndex;
-						_nodes[finalQueueIndex] = node;
+						UpdateQueueIndex(node, finalQueueIndex);
 						break;
 					}
 				}
@@ -411,7 +393,7 @@ namespace Briganti.StraightSkeletons.Priority_Queue
 
 		private void RemoveNode(ref Node node)
 		{
-			node.InQueue = false;
+			_queueIndexById[node.Id] = -1;
 			_availableIds.Add(node.Id);
 		}
 

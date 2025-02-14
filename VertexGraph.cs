@@ -12,7 +12,7 @@ namespace Briganti.StraightSkeletonGeneration
 {
 	public class VertexGraph
 	{
-		public Vertex[] vertices { get; private set; }
+		public float2[] vertices { get; private set; }
 		public int nVertices { get; private set; } = 0;
 		public int maxVertices { get; private set; }
 
@@ -37,15 +37,20 @@ namespace Briganti.StraightSkeletonGeneration
 			this.maxEdges = maxEdges;
 
 			// this can be improved and the upper limit can be calculated EXACTLY - see the lemmas in Stefan Huber's PhD
-			vertices = new Vertex[maxVertices];
+			vertices = new float2[maxVertices];
 			edges = new Edge[maxEdges];
 		}
 
 		public int AddVertex(float2 pos)
 		{
 			// we need to calculate the convex/reflex state later when the adjacent edges are known!!
-			vertices[nVertices++] = new Vertex(pos);
+			vertices[nVertices++] = new float2(pos);
 			return nVertices - 1;
+		}
+
+		public int AddEdge(int prevVertexIndex, int nextVertexIndex)
+		{
+			return AddEdge(new Edge(prevVertexIndex, nextVertexIndex));
 		}
 
 		public int AddEdge(Edge edge)

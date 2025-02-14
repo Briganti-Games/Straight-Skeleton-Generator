@@ -171,5 +171,19 @@ namespace Briganti.StraightSkeletonGeneration
 		{
 			return new int2((int)math.round(v.x), (int)math.round(v.y));
 		}
+
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public static int CompareTo(float2 v1, float2 v2)
+		{
+			// arbitrary ordening to make sure that 2 semi-identical points end up next to each other after sorting
+			if (math.abs(v1.x - v2.x) < EPS) {
+				if (math.abs(v1.y - v2.y) < EPS)
+				{
+					return 0;
+				}
+				else return v1.y.CompareTo(v2.y);
+			}
+			else return v1.x.CompareTo(v2.x);
+		}
 	}
 }

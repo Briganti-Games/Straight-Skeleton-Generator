@@ -14,7 +14,7 @@ namespace Briganti.StraightSkeletonGeneration
 	{
 		public float2 velocity;
 		public WavefrontVertexType type;
-		public float depth;
+		public float creationTime;
 
 		public int prevVertexIndex;
 		public int nextVertexIndex;
@@ -22,11 +22,8 @@ namespace Briganti.StraightSkeletonGeneration
 		public int prevEdgeIndex;
 		public int nextEdgeIndex;
 
-		public VertexData( int prevVertexIndex, int nextVertexIndex, int prevEdgeIndex, int nextEdgeIndex)
+		public void UpdateConnections(int prevVertexIndex, int nextVertexIndex, int prevEdgeIndex, int nextEdgeIndex)
 		{
-			this.type = WavefrontVertexType.Unknown;
-			this.velocity = float2.zero;
-			this.depth = 0;
 			this.prevVertexIndex = prevVertexIndex;
 			this.nextVertexIndex = nextVertexIndex;
 			this.prevEdgeIndex = prevEdgeIndex;

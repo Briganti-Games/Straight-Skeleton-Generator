@@ -15,35 +15,17 @@ namespace Briganti.StraightSkeletonGeneration
 		None,
 		Edge,
 		Split,
+		Nook,
 	}
 
-	public struct WavefrontVertexKey : IEquatable<WavefrontVertexKey>
+	public static class EventTypeExtensions
 	{
-		public readonly float2 pos;
-
-		public WavefrontVertexKey(float2 pos)
+		public static bool IsBatchEvent(this EventType eventType)
 		{
-			this.pos = pos;
-		}
-
-		public bool Equals(WavefrontVertexKey other)
-		{
-			int2 pos = Geometry.RoundToInt(this.pos / Geometry.EPS);
-			int2 otherPos = Geometry.RoundToInt(other.pos / Geometry.EPS);
-			return pos.x == otherPos.x && pos.y == otherPos.y;
-		}
-
-		public override bool Equals(object obj)
-		{
-			if (!(obj is Vertex)) return false;
-			return ((Vertex)obj).Equals(this);
-		}
-
-		public override int GetHashCode()
-		{
-			return pos.GetHashCode();
+			return eventType == EventType.None || eventType == EventType.Edge;
 		}
 	}
+
 
 	public struct Vertex
 	{

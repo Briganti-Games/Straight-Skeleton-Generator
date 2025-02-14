@@ -12,7 +12,7 @@ namespace Briganti.StraightSkeletonGeneration
 {
 	public struct Edge
 	{
-		public readonly int prevVertexIndex, nextVertexIndex;
+		public int prevVertexIndex, nextVertexIndex;
 
 
 		public Edge(int prevVertexIndex, int nextVertexIndex)

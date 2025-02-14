@@ -19,6 +19,14 @@ namespace Briganti.StraightSkeletonGeneration
 		public EventType eventType;
 		public float eventTime;
 		public float2 eventPos;
+		public int nookVertexIndex;
+
+
+		public void Reset()
+		{
+			eventType = EventType.None;
+			eventTime = float.MaxValue;
+		}
 
 		public override string ToString()
 		{
