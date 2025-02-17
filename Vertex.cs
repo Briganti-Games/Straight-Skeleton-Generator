@@ -22,7 +22,7 @@ namespace Briganti.StraightSkeletonGeneration
 	{
 		public static bool IsBatchEvent(this EventType eventType)
 		{
-			return eventType == EventType.None || eventType == EventType.Edge;
+			return eventType == EventType.Edge;
 		}
 	}
 

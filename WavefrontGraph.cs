@@ -23,6 +23,7 @@ namespace Briganti.StraightSkeletonGeneration
 		public readonly VertexData[] vertexDatas;
 		private readonly IEventTimeChangeListener eventTimeListener;
 
+
 		public WavefrontGraph(PolygonWithHoles polygonWithHoles, IEventTimeChangeListener eventTimeListener)
 		{
 			this.eventTimeListener = eventTimeListener;
@@ -36,11 +37,9 @@ namespace Briganti.StraightSkeletonGeneration
 			int nEdges = nVertices;
 
 			// we now add all the edges that will be added for the straight skeleton - the exact number is known
-			// we add one more than the official max because in the case of a circular shape, we want to allow one more vertex to be made than absolutely necessary
-			// so that we can stop when we connect the last 2 edges instead of the last 3 edges. This is easier for the algorithm.
-			// TODO not sure if this works if there are multiple circular shapes in the same polygon.
-			int maxVertices = nVertices + nVertices - 2 + 1;
-			int nArcs = ((2 * nVertices) - 3) * 2; // multiply by 2 because we will be duplicating both sides of an edge for the polygon on each side
+			// each vertex can spawn at most another vertex, because it either collapses an edge, or is moved when it only collapses after the max event time
+			int maxVertices = nVertices * 2;
+			int nArcs = ((2 * nVertices) - 3);
 			int maxEdges = nEdges + nArcs;
 
 			// this can be improved and the upper limit can be calculated EXACTLY - see the lemmas in Stefan Huber's PhD
@@ -264,7 +263,7 @@ namespace Briganti.StraightSkeletonGeneration
 		}
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		private float2 GetVertexPosAtTime(int vertexIndex, float time)
+		public float2 GetVertexPosAtTime(int vertexIndex, float time)
 		{
 			float2 vertex = vertices[vertexIndex];
 			ref VertexData vertexData = ref vertexDatas[vertexIndex];
