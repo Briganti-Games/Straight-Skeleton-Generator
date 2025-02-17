@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using Unity.Mathematics;
 using UnityEngine;
@@ -35,7 +36,10 @@ namespace Briganti.StraightSkeletonGeneration
 			int nEdges = nVertices;
 
 			// we now add all the edges that will be added for the straight skeleton - the exact number is known
-			int maxVertices = nVertices + nVertices - 2;
+			// we add one more than the official max because in the case of a circular shape, we want to allow one more vertex to be made than absolutely necessary
+			// so that we can stop when we connect the last 2 edges instead of the last 3 edges. This is easier for the algorithm.
+			// TODO not sure if this works if there are multiple circular shapes in the same polygon.
+			int maxVertices = nVertices + nVertices - 2 + 1;
 			int nArcs = ((2 * nVertices) - 3) * 2; // multiply by 2 because we will be duplicating both sides of an edge for the polygon on each side
 			int maxEdges = nEdges + nArcs;
 
@@ -94,11 +98,11 @@ namespace Briganti.StraightSkeletonGeneration
 			// now update the vertex data - calculate velocity etc now that the entire edge is known
 			for (int i = 0; i < contour.Length; ++i)
 			{
-				UpdateVertexData(vertexOffset + i);
+				UpdateVertexData(vertexOffset + i, 0);
 			}
 		}
 
-		public int AddVertexToWavefrontAndRemoveEdge(int disappearedEdgeIndex)
+		public int AddVertexToWavefrontAndRemoveEdge(int disappearedEdgeIndex, bool updateEdgeEvents)
 		{
 			// get the edge event
 			ref EdgeEvent edgeEvent = ref edgeEvents[disappearedEdgeIndex];
@@ -109,10 +113,7 @@ namespace Briganti.StraightSkeletonGeneration
 			float2 pos = edgeEvent.eventPos;
 			float time = edgeEvent.eventTime;
 
-			// firstly, just add the vertex
-			int newVertexIndex = AddVertex(pos);
-
-			// now we cut out the disappeared edge from the graph and immediately connect the adjacent vertices
+			
 			ref Edge disappearedEdge = ref edges[disappearedEdgeIndex];
 			ref VertexData prevVertexData = ref vertexDatas[disappearedEdge.prevVertexIndex];
 			ref VertexData nextVertexData = ref vertexDatas[disappearedEdge.nextVertexIndex];
@@ -125,20 +126,19 @@ namespace Briganti.StraightSkeletonGeneration
 			int prevVertexIndex = prevVertexData.prevVertexIndex;
 			int nextVertexIndex = nextVertexData.nextVertexIndex;
 
+			ref Edge prevEdge = ref edges[prevVertexData.prevEdgeIndex];
+			ref Edge nextEdge = ref edges[nextVertexData.nextEdgeIndex];
+
+			// firstly, just add the vertex
+			int newVertexIndex = AddVertex(pos);
+
 			// update the new vertex with the right connections
 			vertexDatas[newVertexIndex].UpdateConnections(prevVertexIndex, nextVertexIndex, prevEdgeIndex, nextEdgeIndex);
 			vertexDatas[newVertexIndex].creationTime = time;
 
-			// connect the edges around the disappeared edge with the new vertex
-			ref Edge prevEdge = ref edges[prevVertexData.prevEdgeIndex];
-			ref Edge nextEdge = ref edges[nextVertexData.nextEdgeIndex];
+			// now we cut out the disappeared edge from the graph and immediately connect the adjacent vertices
 			prevEdge.nextVertexIndex = newVertexIndex;
 			nextEdge.prevVertexIndex = newVertexIndex;
-
-			// now update velocity for all adjacent vertices
-			UpdateVertexData(newVertexIndex);
-			UpdateVertexData(prevEdge.prevVertexIndex);
-			UpdateVertexData(nextEdge.nextVertexIndex);
 
 			// if there are two remaining edges, we are at the end of our process here (the graph is only 2 edges long and they connect to each other),
 			// we add an additional nook event that connects the final two vertices
@@ -165,8 +165,14 @@ namespace Briganti.StraightSkeletonGeneration
 				eventTimeListener.UpdateEdgeEvent(prevVertexData.prevEdgeIndex);
 				eventTimeListener.UpdateEdgeEvent(nextVertexData.nextEdgeIndex);
 			}
-			else
+
+			// now update velocity for all adjacent vertices
+			if (updateEdgeEvents)
 			{
+				UpdateVertexData(newVertexIndex, time);
+				UpdateVertexData(prevEdge.prevVertexIndex, time);
+				UpdateVertexData(nextEdge.nextVertexIndex, time);
+
 				// otherwise, we continue the process of updating event times for the edges
 				UpdateEventTime(vertexDatas[newVertexIndex].prevEdgeIndex);
 				eventTimeListener.UpdateEdgeEvent(vertexDatas[newVertexIndex].prevEdgeIndex);
@@ -191,15 +197,15 @@ namespace Briganti.StraightSkeletonGeneration
 			return edge.prevVertexIndex;
 		}
 
-		private void UpdateVertexData(int vertexIndex)
+		private void UpdateVertexData(int vertexIndex, float time)
 		{
 
-			float2 vertex = vertices[vertexIndex];
+			float2 vertex = GetVertexPosAtTime(vertexIndex, time);
 			ref VertexData vertexData = ref vertexDatas[vertexIndex];
-			float2 prevVertex = vertices[vertexData.prevVertexIndex];
-			float2 nextVertex = vertices[vertexData.nextVertexIndex];
+			float2 prevVertex = GetVertexPosAtTime(vertexData.prevVertexIndex, time);
+			float2 nextVertex = GetVertexPosAtTime(vertexData.nextVertexIndex, time);
 
-			float2 velocity = CalculateVelocity(prevVertex, vertex, nextVertex);
+			float2 velocity = CalculateVelocity(vertexIndex, prevVertex, vertex, nextVertex);
 			bool isReflex = Geometry.IsRelfexVertex(prevVertex, vertex, nextVertex);
 			var type = (isReflex ? WavefrontVertexType.Reflex : WavefrontVertexType.Convex);
 
@@ -237,14 +243,14 @@ namespace Briganti.StraightSkeletonGeneration
 
 			if (Geometry.GetLineIntersection(prevVertex, prevVertex + prevData.velocity, nextVertex, nextVertex + nextData.velocity, out float t0, out float t1))
 			{
-				if (t0 > 0 && t1 > 0)
+				if (t0 > -Geometry.EPS && t1 > -Geometry.EPS)
 				{
 					eventData.eventType = EventType.Edge;
 					eventData.eventPos = prevVertex + prevData.velocity * t0;
 
 					float creationTime = Mathf.Max(prevData.creationTime, nextData.creationTime);
 
-					// we "fast forward" the edge into the current timeframe, so we can se where it is and properly calculate
+					// we "fast forward" the edge into the current timeframe, so we can see where it is and properly calculate
 					// the REMAINING time it takes to get to the collapse point.
 					float2 prevVertexCurrentPos = GetVertexPosAtTime(prevVertex, prevData, creationTime);
 					float2 nextVertexCurrentPos = GetVertexPosAtTime(nextVertex, nextData, creationTime);
@@ -257,9 +263,18 @@ namespace Briganti.StraightSkeletonGeneration
 			}
 		}
 
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		private float2 GetVertexPosAtTime(int vertexIndex, float time)
+		{
+			float2 vertex = vertices[vertexIndex];
+			ref VertexData vertexData = ref vertexDatas[vertexIndex];
+			return GetVertexPosAtTime(vertex, vertexData, time);
+		}
+
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		private float2 GetVertexPosAtTime(in float2 vertex, in VertexData vertexData, float time)
 		{
-			if (time < vertexData.creationTime) throw new ArgumentException($"Time {time} lies in the past of the creation point of vertex {vertex} ({vertexData.creationTime}), this should not be possible.");
+			if (time < vertexData.creationTime - Geometry.EPS) throw new ArgumentException($"Time {time} lies in the past of the creation point of vertex {vertex} ({vertexData.creationTime}), this should not be possible.");
 			time -= vertexData.creationTime;
 			return vertex + vertexData.velocity * time;
 		}
@@ -269,7 +284,7 @@ namespace Briganti.StraightSkeletonGeneration
 			// TODO
 		}
 
-		public static float2 CalculateVelocity(in float2 prev, in float2 curr, in float2 next)
+		public static float2 CalculateVelocity(int vertexIndex, in float2 prev, in float2 curr, in float2 next)
 		{
 			float2 prevToCurr = curr - prev;
 			float2 nextToCurr = next - curr;
@@ -281,7 +296,7 @@ namespace Briganti.StraightSkeletonGeneration
 			float2 dir = math.normalize(moveDir1 + moveDir2);
 			float speed = 2.0f / (math.dot(moveDir1, dir) + math.dot(moveDir2, dir));
 			float2 velocity = dir * speed;
-
+			Debug.Log("Vertex #" + vertexIndex + " has dir " + dir + " and speed " + speed + " based on " + moveDir1 + " and " + moveDir2 + " and final dir has angle " + (Geometry.GetAngle(dir) * Mathf.Rad2Deg) + ", angle between two adjacent dirs is " + (Geometry.SignedAngle(prevToCurr, nextToCurr) * Mathf.Rad2Deg));
 			return velocity;
 		}
 

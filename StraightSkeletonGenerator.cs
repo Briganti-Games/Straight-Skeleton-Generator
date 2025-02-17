@@ -206,8 +206,11 @@ namespace Briganti.StraightSkeletonGeneration
 					continue;
 				}
 
+				// if this is the last edge in this batch, we want to update the adjacent edge events and vertex velocities
+				bool updateEdgeEvents = (i == eventEdgeIndices.Count-1);
+
 				// first add the new vertex to the wavefront and update the wavefront vertices
-				int newVertexIndex = wavefront.AddVertexToWavefrontAndRemoveEdge(edgeIndex);
+				int newVertexIndex = wavefront.AddVertexToWavefrontAndRemoveEdge(edgeIndex, updateEdgeEvents);
 				if (i == 0)
 				{
 					newVertex = wavefront.vertices[newVertexIndex];
