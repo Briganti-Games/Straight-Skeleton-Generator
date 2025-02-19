@@ -116,6 +116,7 @@ namespace Briganti.StraightSkeletonGeneration
 			if (eventBatchIndex != eventBatches.Count) throw new InvalidOperationException($"There are previous batches that still need to be resolved!");
 
 			eventBatches.Clear();
+			eventBatchIndex = 0;
 
 			int edgeIndex = eventQueue.Dequeue();
 			ref EdgeEvent edgeEvent = ref wavefront.edgeEvents[edgeIndex];
@@ -157,9 +158,6 @@ namespace Briganti.StraightSkeletonGeneration
 
 			// we now sort the events by their event pos - that way, we can create only one vertex for each set of edge events that end at the same position
 			eventBatches.Sort((v1, v2) => Geometry.CompareTo(v1, v2));
-
-			// we start at the start
-			eventBatchIndex = 0;
 		}
 
 		private void ProcessEventBatch()

@@ -403,7 +403,7 @@ namespace Briganti.StraightSkeletonGeneration
 			float2 dir = math.normalize(moveDir1 + moveDir2);
 			float speed = 2.0f / (math.dot(moveDir1, dir) + math.dot(moveDir2, dir));
 			float2 velocity = dir * speed;
-			Debug.Log("Vertex #" + vertexIndex + " has dir " + dir + " and speed " + speed + " based on " + moveDir1 + " and " + moveDir2 + " and final dir has angle " + (Geometry.GetAngle(dir) * Mathf.Rad2Deg) + ", angle between two adjacent dirs is " + (Geometry.SignedAngle(prevToCurr, nextToCurr) * Mathf.Rad2Deg));
+			//Debug.Log("Vertex #" + vertexIndex + " has dir " + dir + " and speed " + speed + " based on " + moveDir1 + " and " + moveDir2 + " and final dir has angle " + (Geometry.GetAngle(dir) * Mathf.Rad2Deg) + ", angle between two adjacent dirs is " + (Geometry.SignedAngle(prevToCurr, nextToCurr) * Mathf.Rad2Deg));
 			return velocity;
 		}
 
