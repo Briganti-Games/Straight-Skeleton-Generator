@@ -22,12 +22,20 @@ namespace Briganti.StraightSkeletonGeneration
 		public int prevEdgeIndex;
 		public int nextEdgeIndex;
 
+		public bool inWavefront;
+
 		public void UpdateConnections(int prevVertexIndex, int nextVertexIndex, int prevEdgeIndex, int nextEdgeIndex)
 		{
 			this.prevVertexIndex = prevVertexIndex;
 			this.nextVertexIndex = nextVertexIndex;
 			this.prevEdgeIndex = prevEdgeIndex;
 			this.nextEdgeIndex = nextEdgeIndex;
+			this.inWavefront = true;
+		}
+
+		public override string ToString()
+		{
+			return $"{type} vertex with velocity {velocity} created at {creationTime}, still active {inWavefront}";
 		}
 	}
 }

@@ -25,6 +25,8 @@ namespace Briganti.StraightSkeletonGeneration
 		private readonly float maxEventTime;
 
 		private List<int> eventBatches = new List<int>();
+		private int eventBatchIndex = 0;
+
 		private List<int> edgeEventsAtSamePos = new List<int>();
 
 
@@ -50,7 +52,11 @@ namespace Briganti.StraightSkeletonGeneration
 
 			// we copy all the initial vertices & edges to the straight skeleton - they are always part
 			int nStraightSkeletonVertices = wavefront.nVertices + (wavefront.nVertices);
-			int nStraightSkeletonEdges = wavefront.nEdges + (2 * wavefront.nVertices) - 3;
+
+			// count the number of possible edges in the straight skeleton
+			int nStraightSkeletonEdges = wavefront.nEdges; // each initial edge is one
+			nStraightSkeletonEdges += (2 * wavefront.nVertices) - 3; // then this is the max number that can occur because of edge events
+			nStraightSkeletonEdges += wavefront.nEdges; // there is a worst-case chance that every edge will be reproduced again because no edge events occur before the maxEventTime
 			straightSkeleton = new StraightSkeleton(nStraightSkeletonVertices, nStraightSkeletonEdges);
 			for (int i = 0; i < wavefront.nVertices; ++i)
 			{
@@ -64,25 +70,51 @@ namespace Briganti.StraightSkeletonGeneration
 				ref var edge = ref wavefront.edges[i];
 				straightSkeleton.AddEdge(new Edge(edge.prevVertexIndex, edge.nextVertexIndex));
 			}
-		}
-
-		public StraightSkeleton Generate()
-		{
 
 			// initialize the events now - we are ready to receive them
 			wavefront.GenerateInitialEvents();
 
+		}
+
+		public void Step()
+		{
+			if (eventQueue.Count > 0)
+			{
+				if (IsEventBatchesEmpty()) GenerateEventBatches();
+				ProcessEventBatch();
+			}
+		}
+
+		public bool IsDone()
+		{
+			return eventQueue.Count == 0;
+		}
+
+
+		private bool IsEventBatchesEmpty()
+		{
+			return eventBatchIndex == eventBatches.Count;
+		}
+
+		public StraightSkeleton Generate()
+		{
 			// now we keep popping those events until we're done
 			while (eventQueue.Count > 0)
 			{
-				ProcessEventBatch();
+				GenerateEventBatches();
+				while (!IsEventBatchesEmpty())
+				{
+					ProcessEventBatch();
+				}
 			}
 
 			return straightSkeleton;
 		}
 
-		private void ProcessEventBatch()
+		private void GenerateEventBatches()
 		{
+			if (eventBatchIndex != eventBatches.Count) throw new InvalidOperationException($"There are previous batches that still need to be resolved!");
+
 			eventBatches.Clear();
 
 			int edgeIndex = eventQueue.Dequeue();
@@ -100,7 +132,7 @@ namespace Briganti.StraightSkeletonGeneration
 			eventBatches.Add(edgeIndex);
 
 			// find all events at the same time
-			while (eventQueue.Count > 0 && IsAtSameTime(edgeIndex, eventQueue.First) && edgeEvent.eventType.IsBatchEvent())
+			while (eventQueue.Count > 0 && IsAtSameTime(edgeIndex, eventQueue.First))
 			{
 				edgeIndex = eventQueue.Dequeue();
 				edgeEvent = ref wavefront.edgeEvents[edgeIndex];
@@ -109,7 +141,7 @@ namespace Briganti.StraightSkeletonGeneration
 			}
 
 			// at this point, we either gathered all batch events that occur at the same time, OR we bumped upon a non-batch event, and we need to process that one
-			if (!edgeEvent.eventType.IsBatchEvent())
+			/*if (!edgeEvent.eventType.IsBatchEvent())
 			{
 				for (int i = 0; i < eventBatches.Count - 1; ++i)
 				{
@@ -121,21 +153,28 @@ namespace Briganti.StraightSkeletonGeneration
 
 				eventBatches.Clear();
 				eventBatches.Add(edgeIndex);
-			}
+			}*/
 
 			// we now sort the events by their event pos - that way, we can create only one vertex for each set of edge events that end at the same position
 			eventBatches.Sort((v1, v2) => Geometry.CompareTo(v1, v2));
 
+			// we start at the start
+			eventBatchIndex = 0;
+		}
+
+		private void ProcessEventBatch()
+		{
 			// go over the batch and split them up in groups at the same pos
 			edgeEventsAtSamePos.Clear();
-			for (int i = 0; i < eventBatches.Count; ++i)
+			for (int i = eventBatchIndex; i < eventBatches.Count; ++i)
 			{
 				edgeEventsAtSamePos.Add(eventBatches[i]);
 
 				if (i == eventBatches.Count - 1 || !IsAtSamePos(eventBatches[i], eventBatches[i + 1]))
 				{
 					ProcessEvents(edgeEventsAtSamePos);
-					edgeEventsAtSamePos.Clear();
+					eventBatchIndex = i + 1;
+					break;
 				}
 			}
 		}
@@ -187,7 +226,7 @@ namespace Briganti.StraightSkeletonGeneration
 			int firstEdgeEventIndex = edgeEventIndices[0];
 			ref EdgeEvent firstEdgeEvent = ref wavefront.edgeEvents[firstEdgeEventIndex];
 
-			if (!firstEdgeEvent.eventType.IsBatchEvent() && edgeEventIndices.Count > 1) throw new ArgumentException($"Event {firstEdgeEvent} is not a batch event but we are still trying to process {edgeEventIndices.Count} events at the same time!");
+			//if (!firstEdgeEvent.eventType.IsBatchEvent() && edgeEventIndices.Count > 1) throw new ArgumentException($"Event {firstEdgeEvent} is not a batch event but we are still trying to process {edgeEventIndices.Count} events at the same time!");
 
 			// edge event - easy
 			switch (firstEdgeEvent.eventType)
@@ -264,17 +303,25 @@ namespace Briganti.StraightSkeletonGeneration
 
 		private void SpawnRemainingEdgesAtMaxTime(int firstOverTimeEdgeIndex)
 		{
+			// we generate straight skeleton edges from the current vertex to its position at the max time,
+			// and also update the mapping from the old SK vertex position to the new one
+			for (int i = 0; i < wavefront.nVertices; ++i)
+			{
+				ref VertexData vertexData = ref wavefront.vertexDatas[i];
+				if (!vertexData.inWavefront) continue;
+				SpawnEdgeFromPosToMaxTimePos(i);
+			}
+
 			// we reset the wavefront mapping for each existing vertex that wasn't spawned at the exact max event time
 			// because we want to generate new "forwarded" vertices for them!
-			for (int i = 0; i < wavefront.nVertices; ++i)
+			/*for (int i = 0; i < wavefront.nVertices; ++i)
 			{
 				ref VertexData vertexData = ref wavefront.vertexDatas[i];
 				if (vertexData.creationTime < maxEventTime - Geometry.EPS)
 				{
 					wavefrontToStraightSkeletonVertexIndices[i] = -1;
 				}
-
-			}
+			}*/
 
 			// re-use this list for convenience
 			SpawnEdgeAtMaxTime(firstOverTimeEdgeIndex);
@@ -290,10 +337,22 @@ namespace Briganti.StraightSkeletonGeneration
 			ref Edge edge = ref wavefront.edges[edgeIndex];
 
 			// if the vertex was spawned in the past, we spawn an up-to-date version at the max time
-			int prevSKVertexIndex = GetStraightSkeletonVertexAtMaxTime(edge.prevVertexIndex);
-			int nextSKVertexIndex = GetStraightSkeletonVertexAtMaxTime(edge.nextVertexIndex);
+			int prevSKVertexIndexAtMaxTime = GetStraightSkeletonVertexAtMaxTime(edge.prevVertexIndex);
+			int nextSKVertexIndexAtMaxTime = GetStraightSkeletonVertexAtMaxTime(edge.nextVertexIndex);
+			straightSkeleton.AddEdge(prevSKVertexIndexAtMaxTime, nextSKVertexIndexAtMaxTime);
 
-			straightSkeleton.AddEdge(prevSKVertexIndex, nextSKVertexIndex);
+		}
+
+		private void SpawnEdgeFromPosToMaxTimePos(int vertexIndex)
+		{
+			ref VertexData vertexData = ref wavefront.vertexDatas[vertexIndex];
+			if (vertexData.creationTime < maxEventTime - Geometry.EPS)
+			{
+				int startSKVertexIndex = wavefrontToStraightSkeletonVertexIndices[vertexIndex];
+				wavefrontToStraightSkeletonVertexIndices[vertexIndex] = -1;
+				int endSKVertexIndex = GetStraightSkeletonVertexAtMaxTime(vertexIndex);
+				straightSkeleton.AddEdge(startSKVertexIndex, endSKVertexIndex);
+			}
 		}
 
 		private int GetStraightSkeletonVertexAtMaxTime(int vertexIndex)
@@ -311,10 +370,26 @@ namespace Briganti.StraightSkeletonGeneration
 			else
 			{
 				float2 newVertex = wavefront.GetVertexPosAtTime(vertexIndex, maxEventTime);
-				int newSKVertexIndex = straightSkeleton.AddVertex(newVertex);
+				int newSKVertexIndex = straightSkeleton.AddVertex(newVertex, maxEventTime);
 				wavefrontToStraightSkeletonVertexIndices[vertexIndex] = newSKVertexIndex;
 				return newSKVertexIndex;
 			}
+		}
+
+		public void DrawGizmos()
+		{
+			Gizmos.color = Color.red;
+
+			for (int i = 0; i < straightSkeleton.nEdges; ++i)
+			{
+				var edge = straightSkeleton.edges[i];
+				var prevVertex = straightSkeleton.vertices[edge.prevVertexIndex];
+				var nextVertex = straightSkeleton.vertices[edge.nextVertexIndex];
+
+				Gizmos.DrawLine(new Vector3(prevVertex.x, straightSkeleton.vertexTimes[edge.prevVertexIndex], prevVertex.y), new Vector3(nextVertex.x, straightSkeleton.vertexTimes[edge.nextVertexIndex], nextVertex.y));
+			}
+
+			if (!IsDone()) wavefront.DrawGizmos(time);
 		}
 
 	}

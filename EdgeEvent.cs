@@ -14,12 +14,9 @@ namespace Briganti.StraightSkeletonGeneration
 	{
 		public int queueId;
 
-		public float2 prevVertexVelocity;
-
 		public EventType eventType;
 		public float eventTime;
 		public float2 eventPos;
-		public int nookVertexIndex;
 
 
 		public void Reset()
@@ -30,7 +27,7 @@ namespace Briganti.StraightSkeletonGeneration
 
 		public override string ToString()
 		{
-			return $"Edge event of type {eventType} at time {eventTime} and pos {eventPos}";
+			return $"{eventType} event at time {eventTime} and pos {eventPos}";
 		}
 	}
 }

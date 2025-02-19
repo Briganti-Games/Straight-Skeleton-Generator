@@ -14,6 +14,7 @@ namespace Briganti.StraightSkeletonGeneration
 	public class Geometry
 	{
 		public const float EPS = 0.0001f;
+		public const float EPSSQ = EPS * EPS;
 
 		public static bool GetLineIntersection(float2 p0, float2 p1, float2 q0, float2 q1, out float t0, out float t1)
 		{
@@ -52,7 +53,7 @@ namespace Briganti.StraightSkeletonGeneration
 			float dirCross = Cross2D(r, s);
 
 			// no intersection - they are colinear or parallel
-			if (math.abs(dirCross) < math.EPSILON)
+			if (math.abs(dirCross) < EPS)
 			{
 				return true;
 			}
@@ -126,6 +127,12 @@ namespace Briganti.StraightSkeletonGeneration
 				return new float2(v.y, -v.x);
 			}
 		}
+
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public static float2 Rotate90DegreesClockwise(float2 v) => RotateMinus90Degrees(v);
+
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public static float2 Rotate90DegreesCounterClockwise(float2 v) => Rotate90Degrees(v);
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static float GetAngle(float2 v)
