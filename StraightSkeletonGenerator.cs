@@ -29,13 +29,16 @@ namespace Briganti.StraightSkeletonGeneration
 
 		private List<int> edgeEventsAtSamePos = new List<int>();
 
+		private bool debug;
 
-		public StraightSkeletonGenerator(PolygonWithHoles polygonWithHoles, float maxEventTime)
+
+		public StraightSkeletonGenerator(PolygonWithHoles polygonWithHoles, float maxEventTime, bool performDebugChecks)
 		{
+			this.debug = performDebugChecks;
 			this.maxEventTime = maxEventTime;
 
 			// create the initial graph based on the polygon
-			wavefront = new WavefrontGraph(polygonWithHoles, this);
+			wavefront = new WavefrontGraph(polygonWithHoles, this, debug);
 
 			// generate the event queue
 			eventQueue = new FastStructPriorityQueue<int>(wavefront.maxVertices);
@@ -81,7 +84,7 @@ namespace Briganti.StraightSkeletonGeneration
 			if (eventQueue.Count > 0)
 			{
 				if (IsEventBatchesEmpty()) GenerateEventBatches();
-				ProcessEventBatch();
+				if (!IsEventBatchesEmpty()) ProcessEventBatch();
 			}
 		}
 
@@ -129,7 +132,6 @@ namespace Briganti.StraightSkeletonGeneration
 				return;
 			}
 
-			time = edgeEvent.eventTime;
 			eventBatches.Add(edgeIndex);
 
 			// find all events at the same time
@@ -141,39 +143,55 @@ namespace Briganti.StraightSkeletonGeneration
 				eventBatches.Add(edgeIndex);
 			}
 
-			// at this point, we either gathered all batch events that occur at the same time, OR we bumped upon a non-batch event, and we need to process that one
-			/*if (!edgeEvent.eventType.IsBatchEvent())
-			{
-				for (int i = 0; i < eventBatches.Count - 1; ++i)
-				{
-					edgeIndex = eventBatches[i];
-					edgeEvent = ref wavefront.edgeEvents[edgeIndex];
-					eventQueue.Enqueue(edgeIndex, edgeEvent.eventTime, out int queueId);
-					edgeEvent.queueId = queueId;
-				}
-
-				eventBatches.Clear();
-				eventBatches.Add(edgeIndex);
-			}*/
-
 			// we now sort the events by their event pos - that way, we can create only one vertex for each set of edge events that end at the same position
-			eventBatches.Sort((v1, v2) => Geometry.CompareTo(v1, v2));
+			eventBatches.Sort((v1, v2) => CompareEdgeEvent(v1, v2));
+		}
+
+		private int CompareEdgeEvent(int edgeIndex1, int edgeIndex2)
+		{
+			ref var edgeEvent1 = ref wavefront.edgeEvents[edgeIndex1];
+			ref var edgeEvent2 = ref wavefront.edgeEvents[edgeIndex2];
+
+			int cmp = edgeEvent1.eventType.CompareTo(edgeEvent2.eventType);
+			if (cmp == 0) cmp = Geometry.CompareTo(edgeEvent1.eventPos, edgeEvent2.eventPos);
+			return cmp;
 		}
 
 		private void ProcessEventBatch()
 		{
-			// go over the batch and split them up in groups at the same pos
-			edgeEventsAtSamePos.Clear();
-			for (int i = eventBatchIndex; i < eventBatches.Count; ++i)
-			{
-				edgeEventsAtSamePos.Add(eventBatches[i]);
 
-				if (i == eventBatches.Count - 1 || !IsAtSamePos(eventBatches[i], eventBatches[i + 1]))
+			// process a non-batch event
+			ref var edgeEvent = ref wavefront.edgeEvents[eventBatches[eventBatchIndex]];
+			if (!edgeEvent.eventType.IsBatchEvent())
+			{
+				ProcessNonBatchEvent(eventBatches[eventBatchIndex]);
+				++eventBatchIndex;
+			}
+
+			// go over the batch and split them up in groups at the same pos
+			else
+			{
+				edgeEventsAtSamePos.Clear();
+				for (int i = eventBatchIndex; i < eventBatches.Count; ++i)
 				{
-					ProcessEvents(edgeEventsAtSamePos);
-					eventBatchIndex = i + 1;
-					break;
+					edgeEventsAtSamePos.Add(eventBatches[i]);
+					if (i == eventBatches.Count - 1 || !IsAtSamePos(eventBatches[i], eventBatches[i + 1]))
+					{
+						ProcessBatchEvents(edgeEventsAtSamePos);
+						eventBatchIndex = i + 1;
+						break;
+					}
 				}
+			}
+
+			// validate the graph to catch bugs early
+			wavefront.ValidateState(time);
+
+			// if we emptied the entire set of events that happened at the same time, we update the wavefront
+			if (IsEventBatchesEmpty())
+			{
+				time = edgeEvent.eventTime;
+				wavefront.UpdateWavefront(time);
 			}
 		}
 
@@ -193,20 +211,7 @@ namespace Briganti.StraightSkeletonGeneration
 			return Geometry.CompareTo(edgeEvent1.eventPos, edgeEvent2.eventPos) == 0;
 		}
 
-		private bool IsEdgeEvent(int edgeIndex)
-		{
-			ref EdgeEvent edgeEvent = ref wavefront.edgeEvents[edgeIndex];
-			return edgeEvent.eventType == EventType.Edge;
-		}
-
-		public void AddEdgeEvent(int edgeIndex)
-		{
-			ref EdgeEvent edgeEvent = ref wavefront.edgeEvents[edgeIndex];
-			eventQueue.Enqueue(edgeIndex, edgeEvent.eventTime, out int queueId);
-			edgeEvent.queueId = queueId;
-		}
-
-		public void UpdateEdgeEvent(int edgeIndex)
+		public void AddOrUpdateEdgeEvent(int edgeIndex)
 		{
 			ref EdgeEvent edgeEvent = ref wavefront.edgeEvents[edgeIndex];
 
@@ -215,27 +220,52 @@ namespace Briganti.StraightSkeletonGeneration
 			{
 				eventQueue.UpdatePriority(edgeEvent.queueId, edgeEvent.eventTime);
 			}
+			else
+			{
+				eventQueue.Enqueue(edgeIndex, edgeEvent.eventTime, out int queueId);
+				edgeEvent.queueId = queueId;
+			}
 		}
 
-		private void ProcessEvents(List<int> edgeEventIndices)
+		private void ProcessNonBatchEvent(int edgeIndex)
 		{
-			if (edgeEventIndices.Count == 0) throw new ArgumentException($"You always need at least one event to process.");
+			ref EdgeEvent edgeEvent = ref wavefront.edgeEvents[edgeIndex];
+			if (edgeEvent.eventType.IsBatchEvent()) throw new ArgumentException($"Event {edgeEvent} is a batch event that we are trying to process separately.");
 
-			int firstEdgeEventIndex = edgeEventIndices[0];
+			switch (edgeEvent.eventType)
+			{
+
+				case EventType.Split:
+					ProcessSplitEvent(edgeIndex);
+					break;
+
+				case EventType.Nook:
+					ProcessNookEvent(edgeIndex);
+					break;
+			}
+		}
+
+		private void ProcessBatchEvents(List<int> edgeIndices)
+		{
+			if (edgeIndices.Count == 0) throw new ArgumentException($"You always need at least one event to process.");
+
+			int firstEdgeEventIndex = edgeIndices[0];
 			ref EdgeEvent firstEdgeEvent = ref wavefront.edgeEvents[firstEdgeEventIndex];
-
-			//if (!firstEdgeEvent.eventType.IsBatchEvent() && edgeEventIndices.Count > 1) throw new ArgumentException($"Event {firstEdgeEvent} is not a batch event but we are still trying to process {edgeEventIndices.Count} events at the same time!");
+			if (!firstEdgeEvent.eventType.IsBatchEvent()) throw new ArgumentException($"Event {firstEdgeEvent} is not a batch event but we are still trying to process {edgeIndices.Count} events at the same time!");
 
 			// edge event - easy
 			switch (firstEdgeEvent.eventType)
 			{
 				case EventType.Edge:
-					ProcessEdgeEventsAtSamePos(edgeEventIndices);
+					ProcessEdgeEventsAtSamePos(edgeIndices);
 					break;
 
-				case EventType.Nook:
-					ProcessNookEvent(firstEdgeEventIndex);
+				case EventType.SplitAtVertex:
+					ProcessSplitAtVertexEvent(edgeIndices);
 					break;
+
+				default:
+					throw new NotSupportedException($"{firstEdgeEvent} is not a batch event.");
 			}
 		}
 
@@ -260,13 +290,17 @@ namespace Briganti.StraightSkeletonGeneration
 
 				// first add the new vertex to the wavefront and update the wavefront vertices
 				int newVertexIndex = wavefront.AddVertexToWavefrontAndRemoveEdge(edgeIndex, updateEdgeEvents);
+
+				// invalid state - we didn't remove an edge
+				if (newVertexIndex == -1) continue;
+
 				if (i == 0)
 				{
 					newVertex = wavefront.vertices[newVertexIndex];
 					newSKVertexIndex = straightSkeleton.AddVertex(newVertex, wavefront.GetVertexTime(newVertexIndex));
 				}
 
-				// spawn the vertex and store the mapping
+				// map the new vertex to the first one in this batch
 				wavefrontToStraightSkeletonVertexIndices[newVertexIndex] = newSKVertexIndex;
 
 				// we now also add two edges to the straight skeleton, from the old vertices to the new one, but we go through the mapping first
@@ -274,6 +308,8 @@ namespace Briganti.StraightSkeletonGeneration
 
 				int prevSKVertexIndex = wavefrontToStraightSkeletonVertexIndices[edge.prevVertexIndex];
 				int nextSKVertexIndex = wavefrontToStraightSkeletonVertexIndices[edge.nextVertexIndex];
+				if (prevSKVertexIndex == -1) throw new InvalidOperationException($"Edge {edge} has an invalid vertex {edge.prevVertexIndex} that wasn't added to the straight skeleton before!");
+				if (nextSKVertexIndex == -1) throw new InvalidOperationException($"Edge {edge} has an invalid vertex {edge.nextVertexIndex} that wasn't added to the straight skeleton before!");
 
 				// see if this warrants an edge
 				float2 prevSKVertex = straightSkeleton.vertices[prevSKVertexIndex];
@@ -285,18 +321,93 @@ namespace Briganti.StraightSkeletonGeneration
 			}
 		}
 
+		private List<int> newVertexIndices = new List<int>();
+		public void ProcessSplitEvent(int edgeIndex)
+		{
+			// we are going to be merging all vertices generated in the wavefront, because their difference don't matter to us
+			newVertexIndices.Clear();
+
+			ref var edgeEvent = ref wavefront.edgeEvents[edgeIndex];
+
+			// first add the new vertex to the wavefront and update the wavefront vertices
+			wavefront.SplitEdge(edgeIndex, newVertexIndices);
+
+			// add the reflex arc(s) the skeleton
+			AddReflexArcsToSkeleton(edgeEvent);
+		}
+
+		public void ProcessSplitAtVertexEvent(List<int> eventEdgeIndices)
+		{
+			// we are going to be merging all vertices generated in the wavefront, because their difference don't matter to us
+			newVertexIndices.Clear();
+
+			ref var edgeEvent = ref wavefront.edgeEvents[eventEdgeIndices[0]];
+
+			// first add the new vertex to the wavefront and update the wavefront vertices
+			int splitVertexIndex = wavefront.SplitGraphAtVertex(eventEdgeIndices[0], newVertexIndices);
+
+			// the split didn't happen
+			if (splitVertexIndex == -1) return;
+
+			// add the reflex arc(s) the skeleton
+			AddReflexArcsToSkeleton(edgeEvent);
+
+			// we need to add the arc from the vertex that was replaced by the new vertices to the skeleton
+			int newSKVertexIndex = wavefrontToStraightSkeletonVertexIndices[newVertexIndices[0]];
+			int splitSKVertexIndex = wavefrontToStraightSkeletonVertexIndices[splitVertexIndex];
+			straightSkeleton.AddEdge(splitSKVertexIndex, newSKVertexIndex);
+		}
+
+		private void AddReflexArcsToSkeleton(EdgeEvent edgeEvent)
+		{
+			// nothing got split - we don't do anything, because the split got cancelled (probably because it occured in a previous simultaneous event)
+			if (newVertexIndices.Count == 0) return;
+
+			// create one new vertex and map the rest to this new one
+			float2 newVertex = wavefront.vertices[newVertexIndices[0]];
+			int newSKVertexIndex = straightSkeleton.AddVertex(newVertex, wavefront.GetVertexTime(newVertexIndices[0]));
+			for (int i = 0; i < newVertexIndices.Count; ++i)
+			{
+				wavefrontToStraightSkeletonVertexIndices[newVertexIndices[i]] = newSKVertexIndex;
+			}
+
+			// we now add edges from each reflex vertex to the split point
+			int reflexVertexIndex = edgeEvent.firstSplitReflexVertexIndex;
+			if (reflexVertexIndex == -1) throw new ArgumentException($"No reflex vertex id specified for split event {edgeEvent}");
+
+			while (reflexVertexIndex != -1)
+			{
+				int reflexSKVertexIndex = wavefrontToStraightSkeletonVertexIndices[reflexVertexIndex];
+				straightSkeleton.AddEdge(reflexSKVertexIndex, newSKVertexIndex);
+
+				ref var reflexVertexData = ref wavefront.vertexDatas[reflexVertexIndex];
+				reflexVertexIndex = reflexVertexData.nextSplitReflexVertexIndex;
+
+				// forget this link
+				reflexVertexData.nextSplitReflexVertexIndex = -1;
+			}
+		}
+
 		public void ProcessNookEvent(int eventEdgeIndex)
 		{
+			// remove the nook from the wavefront
+			wavefront.RemoveNook(eventEdgeIndex);
+
 			ref var edgeEvent = ref wavefront.edgeEvents[eventEdgeIndex];
 			ref var edge = ref wavefront.edges[eventEdgeIndex];
 
 			if (edgeEvent.eventType != EventType.Nook) throw new InvalidOperationException($"There is no nook event associated with edge {edge}.");
 
 			// this is easy - just spawn the edge, since the vertices already exist
-			int prevSKVertexIndex = wavefrontToStraightSkeletonVertexIndices[edge.prevVertexIndex];
-			int nextSKVertexIndex = wavefrontToStraightSkeletonVertexIndices[edge.nextVertexIndex];
+			int prevSKVertexIndex = GetStraightSkeletonVertexAtTime(edge.prevVertexIndex, edgeEvent.eventTime);
+			int nextSKVertexIndex = GetStraightSkeletonVertexAtTime(edge.nextVertexIndex, edgeEvent.eventTime);
 
-			straightSkeleton.AddEdge(prevSKVertexIndex, nextSKVertexIndex);
+			// see if this warrants an edge
+			float2 prevSKVertex = straightSkeleton.vertices[prevSKVertexIndex];
+			float2 nextSKVertex = straightSkeleton.vertices[nextSKVertexIndex];
+
+			// add the edges to the straight skeleton
+			if (math.distance(prevSKVertex, nextSKVertex) > Geometry.EPS) straightSkeleton.AddEdge(prevSKVertexIndex, nextSKVertexIndex);
 		}
 
 		private void SpawnRemainingEdgesAtMaxTime(int firstOverTimeEdgeIndex)
@@ -355,6 +466,11 @@ namespace Briganti.StraightSkeletonGeneration
 
 		private int GetStraightSkeletonVertexAtMaxTime(int vertexIndex)
 		{
+			return GetStraightSkeletonVertexAtTime(vertexIndex, maxEventTime);
+		}
+
+		private int GetStraightSkeletonVertexAtTime(int vertexIndex, float time)
+		{
 			ref VertexData vertexData = ref wavefront.vertexDatas[vertexIndex];
 
 			// if there is a mapping, this means we already forwarded the vertex,
@@ -367,8 +483,8 @@ namespace Briganti.StraightSkeletonGeneration
 			// otherwise, we forward it and spawn it
 			else
 			{
-				float2 newVertex = wavefront.GetVertexPosAtTime(vertexIndex, maxEventTime);
-				int newSKVertexIndex = straightSkeleton.AddVertex(newVertex, maxEventTime);
+				float2 newVertex = wavefront.GetVertexPosAtTime(vertexIndex, time);
+				int newSKVertexIndex = straightSkeleton.AddVertex(newVertex, time);
 				wavefrontToStraightSkeletonVertexIndices[vertexIndex] = newSKVertexIndex;
 				return newSKVertexIndex;
 			}

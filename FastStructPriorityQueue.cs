@@ -113,6 +113,7 @@ namespace Briganti.StraightSkeletons.Priority_Queue
 #endif
 		public bool Contains(int nodeId)
 		{
+			if (nodeId < 0 || nodeId >= _queueIndexById.Length) return false;
 			int queueIndex = _queueIndexById[nodeId];
 			return queueIndex != -1;
 		}

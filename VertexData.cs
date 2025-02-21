@@ -24,6 +24,9 @@ namespace Briganti.StraightSkeletonGeneration
 
 		public bool inWavefront;
 
+		public int nextSplitReflexVertexIndex;
+		
+
 		public void UpdateConnections(int prevVertexIndex, int nextVertexIndex, int prevEdgeIndex, int nextEdgeIndex)
 		{
 			this.prevVertexIndex = prevVertexIndex;
@@ -35,7 +38,7 @@ namespace Briganti.StraightSkeletonGeneration
 
 		public override string ToString()
 		{
-			return $"{type} vertex with velocity {velocity} created at {creationTime}, still active {inWavefront}";
+			return $"{type} vertex with velocity {velocity} created at {creationTime}, prev vertex {prevVertexIndex}, next vertex {nextVertexIndex}, still active {inWavefront}";
 		}
 	}
 }
