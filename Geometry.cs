@@ -192,5 +192,21 @@ namespace Briganti.StraightSkeletonGeneration
 			}
 			else return v1.x.CompareTo(v2.x);
 		}
+
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public static bool IsToLeftOfLine(float2 p1, float2 p2, float2 p)
+		{
+			float2 a = p1;
+			float2 b = p2;
+			float2 c = p;
+			bool inNormalDir = ((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)) > 0;
+			return inNormalDir;
+		}
+
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public static bool IsToRightOfLine(float2 p1, float2 p2, float2 p)
+		{
+			return !IsToLeftOfLine(p1, p2, p);
+		}
 	}
 }

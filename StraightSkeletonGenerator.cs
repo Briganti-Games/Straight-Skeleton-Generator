@@ -121,9 +121,11 @@ namespace Briganti.StraightSkeletonGeneration
 			eventBatches.Clear();
 			eventBatchIndex = 0;
 
-			int edgeIndex = eventQueue.Dequeue();
+			int edgeIndex = DequeueNextEvent();
 			ref EdgeEvent edgeEvent = ref wavefront.edgeEvents[edgeIndex];
-			if (edgeEvent.eventType == EventType.None) return; // skip this event
+
+			// we ran out of events in the queue - tap out early
+			if (edgeEvent.eventType == EventType.None) return;
 
 			// if this is the first event that is over time, we just go over all remaining edges in the queue and spawn them at their position at maxEventTime
 			if (edgeEvent.eventTime > maxEventTime)
@@ -137,7 +139,7 @@ namespace Briganti.StraightSkeletonGeneration
 			// find all events at the same time
 			while (eventQueue.Count > 0 && IsAtSameTime(edgeIndex, eventQueue.First))
 			{
-				edgeIndex = eventQueue.Dequeue();
+				edgeIndex = DequeueNextEvent();
 				edgeEvent = ref wavefront.edgeEvents[edgeIndex];
 				if (edgeEvent.eventType == EventType.None) continue; // skip this event
 				eventBatches.Add(edgeIndex);
@@ -145,6 +147,23 @@ namespace Briganti.StraightSkeletonGeneration
 
 			// we now sort the events by their event pos - that way, we can create only one vertex for each set of edge events that end at the same position
 			eventBatches.Sort((v1, v2) => CompareEdgeEvent(v1, v2));
+		}
+
+		private int DequeueNextEvent()
+		{
+			int edgeIndex = eventQueue.Dequeue();
+			ref EdgeEvent edgeEvent = ref wavefront.edgeEvents[edgeIndex];
+			edgeEvent.queueId = -1;
+
+			while (edgeEvent.eventType == EventType.None && eventQueue.Count > 0)
+			{
+				edgeIndex = eventQueue.Dequeue();
+				edgeEvent = ref wavefront.edgeEvents[edgeIndex];
+				edgeEvent.queueId = -1;
+			}
+
+			// return the first proper event
+			return edgeIndex;
 		}
 
 		private int CompareEdgeEvent(int edgeIndex1, int edgeIndex2)
@@ -184,15 +203,15 @@ namespace Briganti.StraightSkeletonGeneration
 				}
 			}
 
-			// validate the graph to catch bugs early
-			wavefront.ValidateState(time);
-
 			// if we emptied the entire set of events that happened at the same time, we update the wavefront
 			if (IsEventBatchesEmpty())
 			{
 				time = edgeEvent.eventTime;
 				wavefront.UpdateWavefront(time);
 			}
+
+			// validate the graph to catch bugs early
+			wavefront.ValidateState(time);
 		}
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -218,7 +237,17 @@ namespace Briganti.StraightSkeletonGeneration
 			// could be removed and in the batch to be processed at this point
 			if (eventQueue.Contains(edgeEvent.queueId))
 			{
-				eventQueue.UpdatePriority(edgeEvent.queueId, edgeEvent.eventTime);
+				// if this is a none-event, we either remove it or ignore it
+				if (edgeEvent.eventType == EventType.None || edgeEvent.eventType == EventType.NotInWavefront)
+				{
+					eventQueue.Remove(edgeEvent.queueId);
+				}
+
+				// update the priority of the valid event
+				else
+				{
+					eventQueue.UpdatePriority(edgeEvent.queueId, edgeEvent.eventTime);
+				}
 			}
 			else
 			{
@@ -390,13 +419,15 @@ namespace Briganti.StraightSkeletonGeneration
 
 		public void ProcessNookEvent(int eventEdgeIndex)
 		{
+			// get the event and do a sanity check
+			ref var edgeEvent = ref wavefront.edgeEvents[eventEdgeIndex];
+			ref var edge = ref wavefront.edges[eventEdgeIndex];
+			if (edgeEvent.eventType != EventType.Nook) throw new InvalidOperationException($"There is no nook event associated with edge {edge}.");
+
 			// remove the nook from the wavefront
 			wavefront.RemoveNook(eventEdgeIndex);
 
-			ref var edgeEvent = ref wavefront.edgeEvents[eventEdgeIndex];
-			ref var edge = ref wavefront.edges[eventEdgeIndex];
 
-			if (edgeEvent.eventType != EventType.Nook) throw new InvalidOperationException($"There is no nook event associated with edge {edge}.");
 
 			// this is easy - just spawn the edge, since the vertices already exist
 			int prevSKVertexIndex = GetStraightSkeletonVertexAtTime(edge.prevVertexIndex, edgeEvent.eventTime);
@@ -420,17 +451,6 @@ namespace Briganti.StraightSkeletonGeneration
 				if (!vertexData.inWavefront) continue;
 				SpawnEdgeFromPosToMaxTimePos(i);
 			}
-
-			// we reset the wavefront mapping for each existing vertex that wasn't spawned at the exact max event time
-			// because we want to generate new "forwarded" vertices for them!
-			/*for (int i = 0; i < wavefront.nVertices; ++i)
-			{
-				ref VertexData vertexData = ref wavefront.vertexDatas[i];
-				if (vertexData.creationTime < maxEventTime - Geometry.EPS)
-				{
-					wavefrontToStraightSkeletonVertexIndices[i] = -1;
-				}
-			}*/
 
 			// re-use this list for convenience
 			SpawnEdgeAtMaxTime(firstOverTimeEdgeIndex);

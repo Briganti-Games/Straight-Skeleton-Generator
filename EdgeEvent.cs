@@ -30,6 +30,7 @@ namespace Briganti.StraightSkeletonGeneration
 
 		public override string ToString()
 		{
+			if (eventType == EventType.NotInWavefront) return "";
 			return $"{eventType} event at time {eventTime} and pos {eventPos}";
 		}
 	}

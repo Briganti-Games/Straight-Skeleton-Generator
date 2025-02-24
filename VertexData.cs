@@ -23,6 +23,7 @@ namespace Briganti.StraightSkeletonGeneration
 		public int nextEdgeIndex;
 
 		public bool inWavefront;
+		public bool partOfSplitEvent;
 
 		public int nextSplitReflexVertexIndex;
 		
