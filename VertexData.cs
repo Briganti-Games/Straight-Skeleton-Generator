@@ -23,9 +23,14 @@ namespace Briganti.StraightSkeletonGeneration
 		public int nextEdgeIndex;
 
 		public bool inWavefront;
-		public bool partOfSplitEvent;
 
-		public int nextSplitReflexVertexIndex;
+		// this is set by the reflex vertex itself
+		public bool partOfSplitEvent;
+		public float splitTime;
+		public int splitEdge;
+
+		// this is set after assigning the vertex to an edge event
+		//public int nextSplitReflexVertexIndex;
 		
 
 		public void UpdateConnections(int prevVertexIndex, int nextVertexIndex, int prevEdgeIndex, int nextEdgeIndex)
@@ -39,6 +44,7 @@ namespace Briganti.StraightSkeletonGeneration
 
 		public override string ToString()
 		{
+			if (!inWavefront) return "";
 			return $"{type} vertex with velocity {velocity} created at {creationTime}, prev vertex {prevVertexIndex}, next vertex {nextVertexIndex}, still active {inWavefront}";
 		}
 	}

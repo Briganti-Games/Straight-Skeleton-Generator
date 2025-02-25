@@ -100,7 +100,7 @@ namespace Briganti.StraightSkeletonGeneration
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static bool IsRelfexVertex(float2 prev, float2 curr, float2 next)
 		{
-			return Det(prev, curr, next) > 0;
+			return Det(prev, curr, next) >= -Geometry.EPS;
 		}
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -157,7 +157,7 @@ namespace Briganti.StraightSkeletonGeneration
 		public static float SignedAngle(float2 from, float2 to)
 		{
 			float unsigned_angle = Angle(from, to);
-			float sign = math.sign(from.x * to.y - from.y * to.x);
+			float sign = Mathf.Sign(from.x * to.y - from.y * to.x);
 			return unsigned_angle * sign;
 		}
 
@@ -172,6 +172,16 @@ namespace Briganti.StraightSkeletonGeneration
 			float2 proj = new(p1.x + u * (p2.x - p1.x), p1.y + u * (p2.y - p1.y));
 			t = u;
 			return proj;
+		}
+
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public static float2 Rotate(float2 v, float angle)
+		{
+			float x = v.x;
+			float y = v.y;
+			float sin = math.sin(angle);
+			float cos = math.cos(angle);
+			return new float2(x * cos - y * sin, x * sin + y * cos);
 		}
 
 		public static int2 RoundToInt(float2 v)
@@ -194,19 +204,23 @@ namespace Briganti.StraightSkeletonGeneration
 		}
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		public static bool IsToLeftOfLine(float2 p1, float2 p2, float2 p)
+		public static bool IsToRightOfLine(float2 p1, float2 p2, float2 p)
 		{
 			float2 a = p1;
 			float2 b = p2;
 			float2 c = p;
-			bool inNormalDir = ((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)) > 0;
+			bool inNormalDir = ((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)) <= Geometry.EPS;
 			return inNormalDir;
 		}
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		public static bool IsToRightOfLine(float2 p1, float2 p2, float2 p)
+		public static bool IsStrictlyToRightOfLine(float2 p1, float2 p2, float2 p)
 		{
-			return !IsToLeftOfLine(p1, p2, p);
+			float2 a = p1;
+			float2 b = p2;
+			float2 c = p;
+			bool inNormalDir = ((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)) < -Geometry.EPS;
+			return inNormalDir;
 		}
 	}
 }

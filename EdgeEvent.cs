@@ -10,6 +10,13 @@ using UnityEngine.UI;
 
 namespace Briganti.StraightSkeletonGeneration
 {
+	public enum SplitPoint
+	{
+		PrevVertex,
+		Edge,
+		NextVertex,
+	}
+
 	public struct EdgeEvent
 	{
 		public int queueId;
@@ -18,14 +25,14 @@ namespace Briganti.StraightSkeletonGeneration
 		public float eventTime;
 		public float2 eventPos;
 
-		public int firstSplitReflexVertexIndex;
-
+		public SplitPoint splitPoint;
+		public int reflexVertexIndex;
 
 		public void Reset()
 		{
 			eventType = EventType.None;
 			eventTime = float.MaxValue;
-			firstSplitReflexVertexIndex = -1;
+			reflexVertexIndex = -1;
 		}
 
 		public override string ToString()

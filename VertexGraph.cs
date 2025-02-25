@@ -43,6 +43,8 @@ namespace Briganti.StraightSkeletonGeneration
 
 		public int AddVertex(float2 pos)
 		{
+			if (nVertices == maxVertices) IncreaseVertexCapacity(maxVertices * 2);
+
 			// we need to calculate the convex/reflex state later when the adjacent edges are known!!
 			vertices[nVertices++] = new float2(pos);
 			return nVertices - 1;
@@ -55,8 +57,28 @@ namespace Briganti.StraightSkeletonGeneration
 
 		public int AddEdge(Edge edge)
 		{
+			if (nEdges == maxEdges) IncreaseVertexCapacity(maxEdges * 2);
+
 			edges[nEdges++] = edge;
 			return nEdges - 1;
+		}
+
+		protected virtual void IncreaseVertexCapacity(int nVertices)
+		{
+			int oldMaxVertices = maxVertices;
+			maxVertices = nVertices;
+			float2[] newVertices = new float2[maxVertices];
+			Array.Copy(vertices, newVertices, oldMaxVertices);
+			vertices = newVertices;
+		}
+
+		protected virtual void IncreaseEdgeCapacity(int nEdges)
+		{
+			int oldMaxEdges = maxEdges;
+			maxEdges = nEdges;
+			Edge[] newEdges = new Edge[maxVertices];
+			Array.Copy(edges, newEdges, oldMaxEdges);
+			edges = newEdges;
 		}
 	}
 }

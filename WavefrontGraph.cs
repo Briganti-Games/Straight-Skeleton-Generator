@@ -19,8 +19,9 @@ namespace Briganti.StraightSkeletonGeneration
 
 	public class WavefrontGraph : VertexGraph
 	{
-		public readonly EdgeEvent[] edgeEvents;
-		public readonly VertexData[] vertexDatas;
+		public EdgeEvent[] edgeEvents { get; private set; }
+		public VertexData[] vertexDatas { get; private set; }
+
 		private readonly IEventTimeChangeListener eventTimeListener;
 
 		private HashSet<int> affectedEdges = new HashSet<int>();
@@ -44,6 +45,9 @@ namespace Briganti.StraightSkeletonGeneration
 
 			// we now add all the edges that will be added for the straight skeleton - the exact number is known
 			// each vertex can spawn at most another vertex, because it either collapses an edge, or is moved when it only collapses after the max event time
+
+			// there is a CHANCE that these values are NOT enough, because these calculations only hold for simple polygons...
+			// if they contain holes, we might go over this and I couldn't find a proper formula to figure out the real max.
 			int maxVertices = nVertices * 2;
 			int nArcs = ((2 * nVertices) - 3);
 			int maxEdges = nEdges + nArcs;
@@ -61,16 +65,18 @@ namespace Briganti.StraightSkeletonGeneration
 			{
 				AddContour(polygonWithHoles.innerContours[i]);
 			}
+
+			// make sure all the other edge events have their queue id reset as well
+			for (int i = nEdges; i < maxEdges; ++i)
+			{
+				edgeEvents[i].eventType = EventType.NotInWavefront;
+				edgeEvents[i].queueId = -1;
+			}
 		}
 
 		public void GenerateInitialEvents()
 		{
-
-			// update all events
-			for (int i = 0; i < nEdges; ++i)
-			{
-				UpdateEventTime(i, 0);
-			}
+			UpdateWavefront(0);
 		}
 
 		private void AddContour(float2[] contour)
@@ -90,7 +96,7 @@ namespace Briganti.StraightSkeletonGeneration
 				// set the vertex data
 				int prevEdgeIndex = edgeOffset + (i - 1 + contour.Length) % contour.Length;
 				int nextEdgeIndex = edgeOffset + i;
-				vertexDatas[newVertexIndex].nextSplitReflexVertexIndex = -1; // we chain all reflex vertices that split an edge at the same position
+				vertexDatas[newVertexIndex].splitEdge = -1; // we don't split an edge by default
 				vertexDatas[newVertexIndex].UpdateConnections(prevVertexIndex, nextVertexIndex, prevEdgeIndex, nextEdgeIndex);
 
 				// also store the edge that connects this vertex and the next one
@@ -99,12 +105,9 @@ namespace Briganti.StraightSkeletonGeneration
 				// by default there is no event for this edge
 				edgeEvents[edgeIndex].eventType = EventType.None;
 				edgeEvents[edgeIndex].queueId = -1;
-			}
 
-			// now update the vertex data - calculate velocity etc now that the entire edge is known
-			for (int i = 0; i < contour.Length; ++i)
-			{
-				UpdateVertexData(vertexOffset + i, 0);
+				affectedVertices.Add(newVertexIndex);
+				affectedEdges.Add(edgeIndex);
 			}
 		}
 
@@ -135,8 +138,8 @@ namespace Briganti.StraightSkeletonGeneration
 			if (nextVertexData.prevEdgeIndex != disappearedEdgeIndex) throw new ArgumentException($"Vertex {disappearedEdge.nextVertexIndex} is not properly linked to edge {disappearedEdgeIndex}");
 
 			// we flag that these vertices were removed from the wavefront, since they merged into a new vertex
-			prevVertexData.inWavefront = false;
-			nextVertexData.inWavefront = false;
+			RemoveFromWavefront(disappearedEdge.prevVertexIndex);
+			RemoveFromWavefront(disappearedEdge.nextVertexIndex);
 
 			// the edge got permanently removed from the wavefront at this point
 			edgeEvent.eventType = EventType.NotInWavefront;
@@ -171,8 +174,8 @@ namespace Briganti.StraightSkeletonGeneration
 			edgeEvent.eventType = EventType.NotInWavefront;
 
 			// remove the edge from the wavefront (and along it also the other edge that forms the same nook)
-			vertexDatas[edge.prevVertexIndex].inWavefront = false;
-			vertexDatas[edge.nextVertexIndex].inWavefront = false;
+			RemoveFromWavefront(edge.prevVertexIndex);
+			RemoveFromWavefront(edge.nextVertexIndex);
 		}
 
 		public void SplitEdge(int splitEdgeIndex, List<int> newVertexIndices)
@@ -181,7 +184,7 @@ namespace Briganti.StraightSkeletonGeneration
 			ref EdgeEvent edgeEvent = ref edgeEvents[splitEdgeIndex];
 
 			// if this event has changed by now, we ignore it
-			if (edgeEvent.eventType != EventType.Split) return;
+			if (edgeEvent.eventType != EventType.Split || edgeEvent.splitPoint != SplitPoint.Edge) throw new ArgumentException($"Edge event {edgeEvent} is not an edge split event!");
 
 			float2 pos = edgeEvent.eventPos;
 			float time = edgeEvent.eventTime;
@@ -189,7 +192,7 @@ namespace Briganti.StraightSkeletonGeneration
 			ref Edge oldEdge = ref edges[splitEdgeIndex];
 
 			// we let the reflex vertex die - it served its purpose
-			int reflexVertexIndex = edgeEvent.firstSplitReflexVertexIndex;
+			int reflexVertexIndex = edgeEvent.reflexVertexIndex;
 			ref VertexData reflexVertexData = ref vertexDatas[reflexVertexIndex];
 
 			// if the reflex vertex was already removed, we have a bug - this is the second split event for the same reflex vertex at the same time
@@ -199,8 +202,7 @@ namespace Briganti.StraightSkeletonGeneration
 			// the edge got permanently removed from the wavefront at this point
 			edgeEvent.eventType = EventType.NotInWavefront;
 
-			reflexVertexData.inWavefront = false;
-			if (reflexVertexData.nextSplitReflexVertexIndex != -1) throw new NotSupportedException($"Multi-split events are currently not yet supported.");
+			RemoveFromWavefront(reflexVertexIndex);
 
 			// create two new vertices - one to be part of the "prev" polygon, one to be part of the "next" polygon
 			int newPrevVertexIndex = AddVertex(pos);
@@ -216,6 +218,10 @@ namespace Briganti.StraightSkeletonGeneration
 			int newPrevEdgeIndex = AddEdge(oldEdge.prevVertexIndex, newPrevVertexIndex);
 			int newNextEdgeIndex = AddEdge(newNextVertexIndex, oldEdge.nextVertexIndex);
 
+			// make sure the new edges are part of the wavefront now
+			edgeEvents[newPrevEdgeIndex].eventType = EventType.None;
+			edgeEvents[newNextEdgeIndex].eventType = EventType.None;
+
 			// we now need to update the vertex connections to and from the split vertex point
 			UpdateConnections(newPrevVertexIndex, oldEdge.prevVertexIndex, reflexVertexData.nextVertexIndex, newPrevEdgeIndex, reflexVertexData.nextEdgeIndex);
 			UpdateConnections(newNextVertexIndex, reflexVertexData.prevVertexIndex, oldEdge.nextVertexIndex, reflexVertexData.prevEdgeIndex, newNextEdgeIndex);
@@ -227,7 +233,7 @@ namespace Briganti.StraightSkeletonGeneration
 			ref EdgeEvent edgeEvent = ref edgeEvents[splitEdgeIndex];
 
 			// if this event has changed by now, we ignore it
-			if (edgeEvent.eventType != EventType.SplitAtVertex) return -1;
+			if (edgeEvent.eventType != EventType.Split || edgeEvent.splitPoint == SplitPoint.Edge) throw new ArgumentException($"Edge event {edgeEvent} is not a vertex split event!");
 
 			float2 pos = edgeEvent.eventPos;
 			float time = edgeEvent.eventTime;
@@ -235,26 +241,18 @@ namespace Briganti.StraightSkeletonGeneration
 			ref Edge oldEdge = ref edges[splitEdgeIndex];
 
 			// we let the reflex vertex die - it served its purpose
-			int reflexVertexIndex = edgeEvent.firstSplitReflexVertexIndex;
+			int reflexVertexIndex = edgeEvent.reflexVertexIndex;
 			ref VertexData reflexVertexData = ref vertexDatas[reflexVertexIndex];
 
 			// if the reflex vertex was already removed from the wavefront, this is the second split event for the same reflex vertex at the same time
 			// this can only mean that the reflex vertex hit 2 edges at their meeting point, and we already processed the split
 			if (!reflexVertexData.inWavefront) return -1;
 
-			reflexVertexData.inWavefront = false;
-			if (reflexVertexData.nextSplitReflexVertexIndex != -1) throw new NotSupportedException($"Multi-split events are currently not yet supported.");
+			RemoveFromWavefront(reflexVertexIndex);
 
-			// see which vertex we're splitting the graph over
-			float2 oldEdgePrevVertex = GetVertexPosAtTime(oldEdge.prevVertexIndex, time);
-			float2 oldEdgeNextVertex = GetVertexPosAtTime(oldEdge.nextVertexIndex, time);
-
-			int splitVertexIndex;
-			if (math.distancesq(oldEdgePrevVertex, pos) < Geometry.EPSSQ) splitVertexIndex = oldEdge.prevVertexIndex;
-			else if (math.distancesq(oldEdgeNextVertex, pos) < Geometry.EPSSQ) splitVertexIndex = oldEdge.nextVertexIndex;
-			else throw new ArgumentException($"This is a vertex split event, but the reflex position {pos} is at neither endpoints {oldEdgeNextVertex} or {oldEdgeNextVertex} of edge {oldEdge}");
+			int splitVertexIndex = (edgeEvent.splitPoint == SplitPoint.PrevVertex) ? oldEdge.prevVertexIndex : oldEdge.nextVertexIndex;
 			ref VertexData splitVertexData = ref vertexDatas[splitVertexIndex];
-			splitVertexData.inWavefront = false;
+			RemoveFromWavefront(splitVertexIndex);
 
 			// create two new vertices - one to be part of the "prev" polygon, one to be part of the "next" polygon
 			int newPrevVertexIndex = AddVertex(pos);
@@ -299,8 +297,26 @@ namespace Briganti.StraightSkeletonGeneration
 			affectedEdges.Add(nextEdgeIndex);
 		}
 
+		private void RemoveFromWavefront(int vertexIndex)
+		{
+			ref VertexData vertexData = ref vertexDatas[vertexIndex];
+			vertexData.inWavefront = false;
+
+			// if this is a reflex vertex, we need to tag every edge that currently thinks it will be split by this vertex as affected
+			if (vertexData.type == WavefrontVertexType.Reflex && vertexData.splitEdge != -1)
+			{
+				affectedEdges.Add(vertexData.splitEdge);
+				vertexData.splitEdge = -1;
+			}
+		}
+
 		public void UpdateWavefront(float time)
 		{
+			// disable optimizations for now to see if the core algorithm actually works
+			UpdateEntireWavefront(time);
+			return;
+
+			// first, make sure all vertices know their velocity etc
 			foreach (int vertexIndex in affectedVertices)
 			{
 				if (vertexDatas[vertexIndex].inWavefront)
@@ -308,12 +324,88 @@ namespace Briganti.StraightSkeletonGeneration
 					UpdateVertexData(vertexIndex, time);
 				}
 			}
-			affectedVertices.Clear();
 
+			// we update the edge/nook events for all edges
 			foreach (int edgeIndex in affectedEdges)
 			{
 				UpdateEventTime(edgeIndex, time);
 			}
+
+			// now for each reflex vertex, calculate the edge they will be splitting and update that edge's event if that's the first thing that'll happen to it
+			for (int vertexIndex = 0; vertexIndex < nVertices; ++vertexIndex)
+			{
+				if (vertexDatas[vertexIndex].inWavefront && vertexDatas[vertexIndex].type == WavefrontVertexType.Reflex)
+				{
+					// if this is an affected vertex, we need to recheck all edges
+					if (affectedVertices.Contains(vertexIndex))
+					{
+						for (int edgeIndex = 0; edgeIndex < nEdges; ++edgeIndex)
+						{
+							if (edgeEvents[edgeIndex].eventType != EventType.NotInWavefront)
+							{
+								UpdateSplitEventTime(vertexIndex, edgeIndex, time);
+							}
+						}
+					}
+
+					// if the vertex itself did not change, we do need to check all affected edges
+					else
+					{
+						foreach (int edgeIndex in affectedEdges)
+						{
+							if (edgeEvents[edgeIndex].eventType != EventType.NotInWavefront)
+							{
+								UpdateSplitEventTime(vertexIndex, edgeIndex, time);
+							}
+						}
+					}
+
+					// now assign the split event to the edge event if there is one
+					if (vertexDatas[vertexIndex].partOfSplitEvent)
+					{
+						AssignSplitEventToEdge(vertexIndex, time);
+					}
+				}
+			}
+
+			affectedVertices.Clear();
+			affectedEdges.Clear();
+		}
+
+		public void UpdateEntireWavefront(float time)
+		{
+			for (int i = 0; i < nVertices; ++i)
+			{
+				UpdateVertexData(i, time);
+			}
+
+			for (int i = 0; i < nEdges; ++i)
+			{
+				UpdateEventTime(i, time);
+			}
+
+			// now for each reflex vertex, calculate the edge they will be splitting and update that edge's event if that's the first thing that'll happen to it
+			for (int vertexIndex = 0; vertexIndex < nVertices; ++vertexIndex)
+			{
+				if (vertexDatas[vertexIndex].inWavefront && vertexDatas[vertexIndex].type == WavefrontVertexType.Reflex)
+				{
+					for (int edgeIndex = 0; edgeIndex < nEdges; ++edgeIndex)
+					{
+						if (edgeEvents[edgeIndex].eventType != EventType.NotInWavefront)
+						{
+							UpdateSplitEventTime(vertexIndex, edgeIndex, time);
+						}
+					}
+
+					// now assign the split event to the edge event if there is one
+					if (vertexDatas[vertexIndex].partOfSplitEvent)
+					{
+						AssignSplitEventToEdge(vertexIndex, time);
+					}
+				}
+			}
+
+			affectedVertices.Clear();
 			affectedEdges.Clear();
 		}
 
@@ -349,14 +441,29 @@ namespace Briganti.StraightSkeletonGeneration
 			// the vertex lies on a parallel line - we can't calculate a real velocity
 			if (Geometry.IsParallelLines(prevVertex, vertex, prevVertex, nextVertex))
 			{
+				// not sure yet if there's an actual use case where a vertex in this situation is actually a real reflex vertex
 				velocity = float2.zero;
+				type = WavefrontVertexType.Convex;
+
+				// a non-moving vertex can never be reflex because we don't want to do any unnecessary calculations
+				/*if (math.distancesq(prevVertex, nextVertex) < Geometry.EPSSQ)
+				{
+				}
+				else
+				{
+					velocity = Geometry.Rotate90DegreesClockwise(math.normalize(nextVertex - prevVertex));
+				}*/
 			}
 
 			vertexData.velocity = velocity;
 			vertexData.type = type;
 
-			// we reset our split event state
-			vertexData.partOfSplitEvent = false;
+			// we reset our split event state - and also the edge that was associated with our split
+			if (vertexData.partOfSplitEvent)
+			{
+				vertexData.partOfSplitEvent = false;
+				edgeEvents[vertexData.splitEdge].Reset();
+			}
 		}
 
 		public void UpdateEventTime(int edgeIndex, float time)
@@ -387,9 +494,6 @@ namespace Briganti.StraightSkeletonGeneration
 
 				// then, the easy part - calculate the edge event
 				UpdateEdgeEventTime(ref edge, ref eventData, time);
-
-				// then we see if this edge is being split by a vertex
-				UpdateSplitEventTime(edgeIndex, ref eventData, time);
 			}
 
 			// add to the queue
@@ -476,19 +580,7 @@ namespace Briganti.StraightSkeletonGeneration
 			return vertex + vertexData.velocity * time;
 		}
 
-		private void UpdateSplitEventTime(int edgeIndex, ref EdgeEvent edgeEvent, float time)
-		{
-			// go over all active reflex vertices and see if they split us
-			for (int i = 0; i < nVertices; ++i)
-			{
-				if (vertexDatas[i].inWavefront && vertexDatas[i].type == WavefrontVertexType.Reflex)
-				{
-					UpdateSplitEventTime(edgeIndex, i, ref edgeEvent, time);
-				}
-			}
-		}
-
-		private void UpdateSplitEventTime(int edgeIndex, int reflexVertexIndex, ref EdgeEvent edgeEvent, float currentTime)
+		private void UpdateSplitEventTime(int reflexVertexIndex, int edgeIndex, float currentTime)
 		{
 			ref Edge edge = ref edges[edgeIndex];
 
@@ -499,118 +591,135 @@ namespace Briganti.StraightSkeletonGeneration
 			float2 nextVertex = GetVertexPosAtTime(edge.nextVertexIndex, currentTime);
 
 			float2 reflexVertex = GetVertexPosAtTime(reflexVertexIndex, currentTime);
-			ref VertexData reflexVertexData = ref vertexDatas[reflexVertexIndex];
-			float2 reflexVelocity = reflexVertexData.velocity;
-
-			// if we are already part of a split event during this phase, we don't add ourselves to another one
-			// this is because we will always be deleted from the wavefront after processing the first split,
-			// so no point in tracking others.
-			if (reflexVertexData.partOfSplitEvent) return;
+			ref VertexData vertexData = ref vertexDatas[reflexVertexIndex];
+			if (!vertexData.inWavefront) return;
+			if (vertexData.type != WavefrontVertexType.Reflex) throw new ArgumentException($"Vertex {reflexVertexIndex} is not a reflex vertex.");
+			float2 reflexVelocity = vertexData.velocity;
 
 			// if the reflex vertex lies ON the prev or next vertex, we have an immediate-time vertex split
 			if (math.distancesq(prevVertex, reflexVertex) < Geometry.EPSSQ || math.distancesq(nextVertex, reflexVertex) < Geometry.EPSSQ)
 			{
-				edgeEvent.eventType = EventType.SplitAtVertex;
-				edgeEvent.eventTime = currentTime;
-				edgeEvent.eventPos = reflexVertex;
-				edgeEvent.firstSplitReflexVertexIndex = reflexVertexIndex;
-
-				reflexVertexData.partOfSplitEvent = true;
+				vertexData.partOfSplitEvent = true;
+				vertexData.splitTime = currentTime;
+				vertexData.splitEdge = edgeIndex;
 
 				return;
 			}
 
+			// we calculate the collision point between the reflex vertex and the edge
+			bool collisionFound = CalculateCollisionPoint(reflexVertex, reflexVelocity, prevVertex, nextVertex, out float L);
 
-			// calculate the normal of the edge
-			float2 normal = Geometry.Rotate90DegreesClockwise(nextVertex - prevVertex);
-
-			// calculate the angle between the normal and reflex vertex
-			float angle = Geometry.Angle(-normal, reflexVelocity);
-
-			// if the reflex vertex is moving in the opposite direction, the reflex vertex will be swallowed by the wavefront before a split can occur with this edge, or both will simply never meet
-			if (angle > Mathf.PI / 2) return;
-
-			// make sure the reflex vertex is on the right side of the line compared to its normal - otherwise the edge would be moving away from the reflex vertex
-			if (!Geometry.IsToRightOfLine(prevVertex, nextVertex, reflexVertex)) return;
-
-			// we can now "easily" calculate the distance the edge needs to travel before it hits our reflex vertex
-			// (it took 6 hours to find the solution to this problem)
-			float2 reflexVertexProj = Geometry.ProjectPointOnLine(prevVertex, nextVertex, reflexVertex, out _);
-			float H = math.distance(reflexVertex, reflexVertexProj);
-			float V = math.length(reflexVelocity);
-
-			// this is now the distance the edge travelled along its normal to reach the collision point
-			float L = H / (1 + V * math.cos(angle));
-			float time = L;
+			// no collision found
+			if (!collisionFound) return;
 
 			// we can now determine the position where the edge meets the reflex vertex
 			//float distanceAlongVertexLine = L * V;
+			float time = L;
 			float2 eventPos = reflexVertex + reflexVelocity * time;
 
 			// because lines always move at constant speed, the time is identical to the move distance of the edge
 			float eventTime = currentTime + time;
 
-			// there was another event earlier
-			if (edgeEvent.eventType != EventType.None && edgeEvent.eventTime < eventTime) return;
+			// we had a split before
+			if (vertexData.partOfSplitEvent && eventTime >= vertexData.splitTime - Geometry.EPS) return;
 
-			// if the reflex vertex collides with us after our collapse, we don't bother
-			if (edgeEvent.eventType == EventType.Edge && eventTime > edgeEvent.eventTime - Geometry.EPS) return;
-
-			// see if we are in the same time & place for the split
-			bool sameTimeAndPlace = (math.abs(eventTime - edgeEvent.eventTime) < Geometry.EPS) && (math.distancesq(eventPos, edgeEvent.eventPos) < Geometry.EPSSQ);
-
-			// we have multiple splits with this edge at the same time - we just skip this one and do them one by one
-			if (edgeEvent.eventType.IsSplitEvent() && !sameTimeAndPlace) return;
+			// this edge already has an event at the same time or earlier
+			ref EdgeEvent edgeEvent = ref edgeEvents[edgeIndex];
+			if (edgeEvent.eventTime <= eventTime + Geometry.EPS) return;
 
 			// now finally, we need to make sure that this still falls into the edge once it moved that far
 			float2 prevVertexAtEventTime = GetVertexPosAtTime(edge.prevVertexIndex, eventTime);
 			float2 nextVertexAtEventTime = GetVertexPosAtTime(edge.nextVertexIndex, eventTime);
 			Geometry.ProjectPointOnLine(prevVertexAtEventTime, nextVertexAtEventTime, eventPos, out float tLine);
-			if (tLine < 0 || tLine > 1) return;
+			if (tLine < -Geometry.EPS || tLine > 1 + Geometry.EPS || tLine == float.NaN) return;
 
-			// at this point, if we have a split, it MUST be a multi split!
-			if (edgeEvent.eventType.IsSplitEvent() && !sameTimeAndPlace) throw new ArgumentException($"We should have a split event, but current even {edgeEvent} does not occur at time {eventTime} or place {eventPos}.");
+			// this is the first split (in time) for this vertex, so we assign it!
+			vertexData.partOfSplitEvent = true;
+			vertexData.splitTime = eventTime;
+			vertexData.splitEdge = edgeIndex;
+		}
+
+		private bool CalculateCollisionPoint(float2 p, float2 v, float2 p1, float2 p2, out float y)
+		{
+			y = 0.0f;
+
+			float2 normal = Geometry.Rotate90DegreesClockwise(p2 - p1);
+
+			// first, we offset everthing so that p1 is the origin, ensuring that the line goes through the origin
+			p -= p1;
+
+			// now we need to rotate everything so that the normal is pointing up
+			float angle = Geometry.SignedAngle(normal, new float2(0, 1));
+
+			// rotate the reflex velocity
+			v = Geometry.Rotate(v, angle);
+			p = Geometry.Rotate(p, angle);
+
+			// if we are at the line, we meet immediately, no matter our speed
+			if (math.abs(p.y) < Geometry.EPS) return true;
+
+			// if we are moving at exactly the speed of the line, but we are not at the line at the start, we also never meet because we'll be moving parallel
+			if (math.abs(v.y - 1) < Geometry.EPS) return false;
+
+			// if we are below the line and not moving upwards fast enough, we never meet
+			if (p.y < -Geometry.EPS && v.y <= 1 + Geometry.EPS) return false;
+
+			// if we are above the line and not moving SLOW enough, we never meet
+			if (p.y > Geometry.EPS && v.y >= 1 - Geometry.EPS) return false;
+
+			// now calculate the actual moving point
+			y = p.y / (1 - v.y);
+			return true;
+		}
+
+		private void AssignSplitEventToEdge(int vertexIndex, float currentTime)
+		{
+			float2 vertex = vertices[vertexIndex];
+			ref VertexData vertexData = ref vertexDatas[vertexIndex];
+
+			if (vertexData.type != WavefrontVertexType.Reflex) throw new ArgumentException($"Vertex {vertexIndex} is not a reflex vertex.");
+			if (!vertexData.inWavefront) return;
+
+			// if we did not split anything, we're done
+			if (!vertexData.partOfSplitEvent) return;
+
+			// we find the split edge
+			ref Edge edge = ref edges[vertexData.splitEdge];
+			ref var edgeEvent = ref edgeEvents[vertexData.splitEdge];
+
+
+			// if the split happened after a nook or edge event, we don't assign it
+			if (edgeEvent.eventTime <= vertexData.splitTime) return;
+
+			// if the edge event is already a split, we tap out - we don't do more than 1 split on one edge at the same time
+			if (edgeEvent.eventType == EventType.Split) return;
+			if (edgeEvent.reflexVertexIndex != -1) throw new ArgumentException($"There was already a split reflex vertex assigned to edge {edgeEvent}!");
+
+			// calculate the event time & pos
+			float eventTime = vertexData.splitTime;
+			float2 eventPos = vertex + vertexData.velocity * eventTime;
+
+			// now finally, we need to make sure that this still falls into the edge once it moved that far
+			float2 prevVertexAtEventTime = GetVertexPosAtTime(edge.prevVertexIndex, eventTime);
+			float2 nextVertexAtEventTime = GetVertexPosAtTime(edge.nextVertexIndex, eventTime);
+			Geometry.ProjectPointOnLine(prevVertexAtEventTime, nextVertexAtEventTime, eventPos, out float tLine);
 
 			// if we split at exactly the corner, we have a special type of split event - this event will NOT generate new edges,
 			// but will still split the entire graph into two pieces and spawn new vertices at the split point.
-			EventType splitEventType = EventType.Split;
-			if (tLine < Geometry.EPS || tLine > 1.0f - Geometry.EPS) splitEventType = EventType.SplitAtVertex;
-
-			// it must also be a split of the same type - the combination of split vertex or normal split is impossible
-			// because it depends entirely on the position of the event pos.
-			// if it is a multi split but one of a different kind (split vertex vs s
-			if (edgeEvent.eventType.IsSplitEvent() && edgeEvent.eventType != splitEventType) throw new ArgumentException($"Somehow, the original edge event {edgeEvent} has a different split type than the new split found ({splitEventType}), which should be impossible as the type depends entirely on the event pos position relative to the edge.");
+			SplitPoint splitPoint = SplitPoint.Edge;
+			if (tLine < Geometry.EPS) splitPoint = SplitPoint.PrevVertex;
+			else if (tLine > 1.0f - Geometry.EPS) splitPoint = SplitPoint.NextVertex;
 
 			// we have a split event!
-			edgeEvent.eventType = splitEventType;
+			edgeEvent.eventType = EventType.Split;
 			edgeEvent.eventTime = eventTime;
 			edgeEvent.eventPos = eventPos;
 
-			reflexVertexData.partOfSplitEvent = true;
+			edgeEvent.reflexVertexIndex = vertexIndex;
+			edgeEvent.splitPoint = splitPoint;
 
-			// this is the first split event at this time & place, store the index
-			if (edgeEvent.firstSplitReflexVertexIndex == -1)
-			{
-				edgeEvent.firstSplitReflexVertexIndex = reflexVertexIndex;
-			}
-
-			// this is a multisplit, and we store ALL reflex vertices involved in the multisplit
-			else
-			{
-				AddSplitReflexIndexToChain(ref edgeEvent, reflexVertexIndex);
-			}
-		}
-
-		private void AddSplitReflexIndexToChain(ref EdgeEvent edgeEvent, int reflexVertexIndex)
-		{
-			ref VertexData vertexData = ref vertexDatas[edgeEvent.firstSplitReflexVertexIndex];
-
-			while (vertexData.nextSplitReflexVertexIndex != -1)
-			{
-				vertexData = ref vertexDatas[vertexData.nextSplitReflexVertexIndex];
-			}
-
-			vertexData.nextSplitReflexVertexIndex = reflexVertexIndex;
+			// add to the queue
+			eventTimeListener.AddOrUpdateEdgeEvent(vertexData.splitEdge);
 		}
 
 		public static float2 CalculateVelocity(int vertexIndex, in float2 prev, in float2 curr, in float2 next)
@@ -731,7 +840,26 @@ namespace Briganti.StraightSkeletonGeneration
 
 				Gizmos.DrawLine(new Vector3(vertex.x, creationTime + 0.01f, vertex.y), new Vector3(endPoint.x, creationTime + 0.01f, endPoint.y));
 			}
+		}
 
+		protected override void IncreaseVertexCapacity(int nVertices)
+		{
+			base.IncreaseVertexCapacity(nVertices);
+
+			int oldLength = vertexDatas.Length;
+			VertexData[] newVertexDatas = new VertexData[nVertices];
+			Array.Copy(vertexDatas, newVertexDatas, oldLength);
+			vertexDatas = newVertexDatas;
+		}
+
+		protected override void IncreaseEdgeCapacity(int nEdges)
+		{
+			base.IncreaseEdgeCapacity(nEdges);
+
+			int oldLength = edgeEvents.Length;
+			EdgeEvent[] newEdgeEvents = new EdgeEvent[nEdges];
+			Array.Copy(edgeEvents, newEdgeEvents, oldLength);
+			newEdgeEvents = edgeEvents;
 		}
 	}
 }

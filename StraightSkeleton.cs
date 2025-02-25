@@ -13,7 +13,8 @@ namespace Briganti.StraightSkeletonGeneration
 {
 	public class StraightSkeleton : VertexGraph
 	{
-		public readonly float[] vertexTimes;
+		public float[] vertexTimes { get; private set; }
+		public int[] wavefrontToStraightSkeletonVertexIndices { get; private set; }
 
 		public StraightSkeleton(int maxVertices, int maxEdges) : base(maxVertices, maxEdges)
 		{
@@ -25,6 +26,17 @@ namespace Briganti.StraightSkeletonGeneration
 			int vertexIndex = base.AddVertex(pos);
 			vertexTimes[vertexIndex] = time;
 			return vertexIndex;
+		}
+
+		protected override void IncreaseVertexCapacity(int nVertices)
+		{
+			base.IncreaseVertexCapacity(nVertices);
+
+			int oldLength = vertexTimes.Length;
+
+			float[] newVertexTimes = new float[nVertices];
+			Array.Copy(vertexTimes, newVertexTimes, oldLength);
+			vertexTimes = newVertexTimes;
 		}
 	}
 }
