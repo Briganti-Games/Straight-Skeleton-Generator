@@ -25,6 +25,7 @@ namespace Briganti.StraightSkeletonGeneration
 		public bool inWavefront;
 
 		// this is set by the reflex vertex itself
+		public SplitPoint splitPoint;
 		public bool partOfSplitEvent;
 		public float splitTime;
 		public int splitEdge;

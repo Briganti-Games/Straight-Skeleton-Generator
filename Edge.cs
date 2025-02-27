@@ -21,6 +21,13 @@ namespace Briganti.StraightSkeletonGeneration
 			this.nextVertexIndex = nextVertexIndex;
 		}
 
+		public int GetPoint(SplitPoint point)
+		{
+			if (point == SplitPoint.PrevVertex) return prevVertexIndex;
+			else if (point == SplitPoint.NextVertex) return nextVertexIndex;
+			else throw new ArgumentException($"Split point {point} is not allowed.");
+		}
+
 		public override string ToString()
 		{
 			return $"Edge from vertices {prevVertexIndex} to {nextVertexIndex}";

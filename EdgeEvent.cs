@@ -25,7 +25,6 @@ namespace Briganti.StraightSkeletonGeneration
 		public float eventTime;
 		public float2 eventPos;
 
-		public SplitPoint splitPoint;
 		public int reflexVertexIndex;
 
 		public void Reset()

@@ -211,6 +211,7 @@ namespace Briganti.StraightSkeletonGeneration
 			}
 
 			// validate the graph to catch bugs early
+			Debug.Log("Wavefront consists of " + wavefront.nVertices + " vertices and " + wavefront.nEdges + " edges, while straight skeleton consists of " + straightSkeleton.nVertices + " vertices and " + straightSkeleton.nEdges + " edges");
 			wavefront.ValidateState(time);
 		}
 
@@ -348,59 +349,125 @@ namespace Briganti.StraightSkeletonGeneration
 		}
 
 		private List<int> newVertexIndices = new List<int>();
+		private List<int> splitVertexIndices = new List<int>();
 		public void ProcessSplitEvent(List<int> eventEdgeIndices)
 		{
 			// we are going to be merging all vertices generated in the wavefront, because their difference don't matter to us
 			newVertexIndices.Clear();
+			splitVertexIndices.Clear();
 
-			// if this is a multi split, we object!
-			if (eventEdgeIndices.Count != 1) throw new ArgumentException($"Multi-split is currently not supported, but we have one at {wavefront.edgeEvents[eventEdgeIndices[0]].eventPos}");
-
-			int edgeIndex = eventEdgeIndices[0];
-			ref var edgeEvent = ref wavefront.edgeEvents[edgeIndex];
-
-			// first add the new vertex to the wavefront and update the wavefront vertices
-			if (edgeEvent.splitPoint == SplitPoint.Edge)
+			// first, make sure this is still a valid spit - another split or event might have deleted some of the edges or involved vertices
+			bool splitCancelled = false;
+			for (int i = 0; i < eventEdgeIndices.Count; ++i)
 			{
-				wavefront.SplitEdge(edgeIndex, newVertexIndices);
-
-				// add the reflex arc(s) the skeleton
-				AddReflexArcsToSkeleton(edgeEvent);
+				int edgeIndex = eventEdgeIndices[i];
+				if (!wavefront.IsPartOfWavefront(edgeIndex))
+				{
+					splitCancelled = true;
+					break;
+				}
 			}
 
-			else
+			if (splitCancelled) return;
+
+			// collect all vertices involved in the split, and generate one if the relevant edge is an edge split
+			for (int i = 0; i < eventEdgeIndices.Count; ++i)
 			{
-				// first add the new vertex to the wavefront and update the wavefront vertices
-				int splitVertexIndex = wavefront.SplitGraphAtVertex(edgeIndex, newVertexIndices);
+				int edgeIndex = eventEdgeIndices[i];
+				ref var edgeEvent = ref wavefront.edgeEvents[edgeIndex];
+				int vertexIndex = edgeEvent.reflexVertexIndex;
+				ref var vertexData = ref wavefront.vertexDatas[vertexIndex];
 
-				// add the reflex arc(s) the skeleton
-				AddReflexArcsToSkeleton(edgeEvent);
+				// add the reflex vertex to the list
+				if (vertexData.type != WavefrontVertexType.Reflex) throw new ArgumentException($"Split edge event {edgeEvent} was triggered by a non-reflex vertex {vertexData}.");
+				splitVertexIndices.Add(vertexIndex);
 
-				// we need to add the arc from the vertex that was replaced by the new vertices to the skeleton
-				EnsureWavefrontMappingCapacity();
-				int newSKVertexIndex = wavefrontToStraightSkeletonVertexIndices[newVertexIndices[0]];
-				int splitSKVertexIndex = wavefrontToStraightSkeletonVertexIndices[splitVertexIndex];
-				straightSkeleton.AddEdge(splitSKVertexIndex, newSKVertexIndex);
+				// now if we're splitting an edge, we first split the edge and add the split point to the list
+				if (vertexData.splitPoint == SplitPoint.Edge)
+				{
+					int newVertexIndex = wavefront.SplitEdge(edgeIndex);
+					splitVertexIndices.Add(newVertexIndex);
+					newVertexIndices.Add(newVertexIndex);
+				}
+
+				// if we're not splitting an edge for we have a split at one of the edge ends, we actually add the endpoint as well if it is NOT a relfex vertex
+				// this is because when two reflex vertices collide, they will also register to each other as a split point, but will already have been added earlier
+				else
+				{
+					ref var edge = ref wavefront.edges[edgeIndex];
+					int splitVertexIndex = edge.GetPoint(vertexData.splitPoint);
+					ref var splitVertexData = ref wavefront.vertexDatas[splitVertexIndex];
+					if (splitVertexData.type == WavefrontVertexType.Convex && !splitVertexIndices.Contains(splitVertexIndex)) splitVertexIndices.Add(splitVertexIndex);
+				}
 			}
 
+			// now that we have a bunch of points all at the same position - some reflex vertices, some just split vertices, some endpoints of an edge,
+			// we can actually perform the split of the graph into parts.
+			wavefront.SplitGraphAtVertices(splitVertexIndices, eventEdgeIndices[0], newVertexIndices);
+
+			// now add all the reflex arcs that were created to the skeleton
+			EnsureWavefrontMappingCapacity();
+			AddReflexArcsToSkeleton(splitVertexIndices, newVertexIndices);
+
+			// finally add, for each vertex event, an additional arc in the straight skeleton from the split 
+			// I don't think this is really a thing??
+			/*for (int i = 0; i < eventEdgeIndices.Count; ++i)
+			{
+				int idx = (i + splitListIndex) % eventEdgeIndices.Count;
+
+				int edgeIndex = eventEdgeIndices[idx];
+				ref EdgeEvent edgeEvent = ref wavefront.edgeEvents[edgeIndex];
+				ref VertexData vertexData = ref wavefront.vertexDatas[edgeEvent.reflexVertexIndex];
+
+				if (vertexData.splitPoint != SplitPoint.Edge)
+				{
+					// we need to add the arc from the vertex that was replaced by the new vertices to the skeleton
+					int newSKVertexIndex = wavefrontToStraightSkeletonVertexIndices[newVertexIndices[0]];
+					int splitSKVertexIndex = wavefrontToStraightSkeletonVertexIndices[splitVertexIndex];
+					straightSkeleton.AddEdge(splitSKVertexIndex, newSKVertexIndex);
+				}
+			}*/
 		}
 
-		private void AddReflexArcsToSkeleton(EdgeEvent edgeEvent)
+		private void AddReflexArcsToSkeleton(List<int> splitVertexIndices, List<int> newVertexIndices)
 		{
 			// nothing got split - we don't do anything, because the split got cancelled (probably because it occured in a previous simultaneous event)
 			if (newVertexIndices.Count == 0) return;
 
 			// create one new vertex and map the rest to this new one
 			EnsureWavefrontMappingCapacity();
-			float2 newVertex = wavefront.vertices[newVertexIndices[0]];
-			int newSKVertexIndex = straightSkeleton.AddVertex(newVertex, wavefront.GetVertexTime(newVertexIndices[0]));
-			for (int i = 0; i < newVertexIndices.Count; ++i)
+			bool first = true;
+			int newSKVertexIndex = -1;
+			foreach (int vertexIndex in newVertexIndices)
 			{
-				wavefrontToStraightSkeletonVertexIndices[newVertexIndices[i]] = newSKVertexIndex;
+				// this might be an intermediate vertex from the split event that was immediately discarded afterwards
+				if (!wavefront.vertexDatas[vertexIndex].inWavefront) continue;
+
+				if (first)
+				{
+					float2 newVertex = wavefront.vertices[vertexIndex];
+					newSKVertexIndex = straightSkeleton.AddVertex(newVertex, wavefront.GetVertexTime(vertexIndex));
+					first = false;
+				}
+
+				if (newSKVertexIndex == -1) throw new InvalidOperationException($"New SK Vertex should have been assigned by now.");
+				wavefrontToStraightSkeletonVertexIndices[vertexIndex] = newSKVertexIndex;
 			}
 
-			int reflexSKVertexIndex = wavefrontToStraightSkeletonVertexIndices[edgeEvent.reflexVertexIndex];
-			straightSkeleton.AddEdge(reflexSKVertexIndex, newSKVertexIndex);
+			// for each reflex vertex, we draw an arc to the new split point
+			for (int i = 0; i < splitVertexIndices.Count; ++i)
+			{
+				int vertexIndex = splitVertexIndices[i];
+
+				int reflexSKVertexIndex = wavefrontToStraightSkeletonVertexIndices[vertexIndex];
+				float2 oldPos = straightSkeleton.vertices[reflexSKVertexIndex];
+				float2 newPos = straightSkeleton.vertices[newSKVertexIndex];
+
+				if (math.distancesq(oldPos, newPos) > Geometry.EPSSQ)
+				{
+					straightSkeleton.AddEdge(reflexSKVertexIndex, newSKVertexIndex);
+				}
+			}
 		}
 
 		public void ProcessNookEvent(int eventEdgeIndex)
