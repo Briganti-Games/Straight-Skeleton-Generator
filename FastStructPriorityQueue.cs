@@ -467,11 +467,11 @@ namespace Briganti.StraightSkeletons.Priority_Queue
 		{
 			var queueIndex = _queueIndexById[nodeId];
 			ref Node node = ref _nodes[queueIndex];
+			RemoveNode(ref node);
 
 			//If the node is already the last node, we can remove it immediately
 			if (node.QueueIndex == _numNodes)
 			{
-				RemoveNode(ref node);
 				_numNodes--;
 				return;
 			}
