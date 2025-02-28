@@ -298,7 +298,7 @@ namespace Briganti.StraightSkeletonGeneration
 		public void ProcessEdgeEventsAtSamePos(List<int> eventEdgeIndices)
 		{
 			// we are going to be merging all vertices generated in the wavefront, because their difference don't matter to us
-			int newSKVertexIndex = 0;
+			int newSKVertexIndex = -1;
 			float2 newVertex = float2.zero;
 			for (int i = 0; i < eventEdgeIndices.Count; ++i)
 			{
@@ -330,15 +330,12 @@ namespace Briganti.StraightSkeletonGeneration
 				EnsureWavefrontMappingCapacity();
 				wavefrontToStraightSkeletonVertexIndices[newVertexIndex] = newSKVertexIndex;
 
-				// we now also add two edges to the straight skeleton, from the old vertices to the new one, but we go through the mapping first
+				// we now also add an edge to the straight skeleton
 				ref var edge = ref wavefront.edges[edgeIndex];
 
-				int prevSKVertexIndex = wavefrontToStraightSkeletonVertexIndices[edge.prevVertexIndex];
-				int nextSKVertexIndex = wavefrontToStraightSkeletonVertexIndices[edge.nextVertexIndex];
-				if (prevSKVertexIndex == -1) throw new InvalidOperationException($"Edge {edge} has an invalid vertex {edge.prevVertexIndex} that wasn't added to the straight skeleton before!");
-				if (nextSKVertexIndex == -1) throw new InvalidOperationException($"Edge {edge} has an invalid vertex {edge.nextVertexIndex} that wasn't added to the straight skeleton before!");
-
 				// see if this warrants an edge
+				int prevSKVertexIndex = GetStraightSkeletonVertexAtCreationTime(edge.prevVertexIndex);
+				int nextSKVertexIndex = GetStraightSkeletonVertexAtCreationTime(edge.nextVertexIndex);
 				float2 prevSKVertex = straightSkeleton.vertices[prevSKVertexIndex];
 				float2 nextSKVertex = straightSkeleton.vertices[nextSKVertexIndex];
 
@@ -348,12 +345,12 @@ namespace Briganti.StraightSkeletonGeneration
 			}
 		}
 
-		private List<int> newVertexIndices = new List<int>();
+		private List<Edge> newStraightSkeletonEdges = new List<Edge>();
 		private List<int> splitVertexIndices = new List<int>();
 		public void ProcessSplitEvent(List<int> eventEdgeIndices)
 		{
 			// we are going to be merging all vertices generated in the wavefront, because their difference don't matter to us
-			newVertexIndices.Clear();
+			newStraightSkeletonEdges.Clear();
 			splitVertexIndices.Clear();
 
 			// first, make sure this is still a valid spit - another split or event might have deleted some of the edges or involved vertices
@@ -387,7 +384,6 @@ namespace Briganti.StraightSkeletonGeneration
 				{
 					int newVertexIndex = wavefront.SplitEdge(edgeIndex);
 					splitVertexIndices.Add(newVertexIndex);
-					newVertexIndices.Add(newVertexIndex);
 				}
 
 				// if we're not splitting an edge for we have a split at one of the edge ends, we actually add the endpoint as well if it is NOT a relfex vertex
@@ -403,11 +399,11 @@ namespace Briganti.StraightSkeletonGeneration
 
 			// now that we have a bunch of points all at the same position - some reflex vertices, some just split vertices, some endpoints of an edge,
 			// we can actually perform the split of the graph into parts.
-			wavefront.SplitGraphAtVertices(splitVertexIndices, eventEdgeIndices[0], newVertexIndices);
+			wavefront.SplitGraphAtVertices(splitVertexIndices, eventEdgeIndices[0], newStraightSkeletonEdges);
 
 			// now add all the reflex arcs that were created to the skeleton
 			EnsureWavefrontMappingCapacity();
-			AddReflexArcsToSkeleton(splitVertexIndices, newVertexIndices);
+			AddReflexArcsToSkeleton(newStraightSkeletonEdges);
 
 			// finally add, for each vertex event, an additional arc in the straight skeleton from the split 
 			// I don't think this is really a thing??
@@ -429,44 +425,79 @@ namespace Briganti.StraightSkeletonGeneration
 			}*/
 		}
 
-		private void AddReflexArcsToSkeleton(List<int> splitVertexIndices, List<int> newVertexIndices)
+		private int GetStraightSkeletonVertexAtCreationTime(int wavefrontVertexIndex)
+		{
+			ref VertexData vertexData = ref wavefront.vertexDatas[wavefrontVertexIndex];
+			return GetStraightSkeletonVertexAtTime(wavefrontVertexIndex, vertexData.creationTime);
+		}
+
+		private int GetStraightSkeletonVertexAtMaxTime(int vertexIndex)
+		{
+			return GetStraightSkeletonVertexAtTime(vertexIndex, maxEventTime);
+		}
+
+		private int GetStraightSkeletonVertexAtTime(int vertexIndex, float time)
+		{
+			// if there is a mapping, this means we already forwarded the vertex,
+			// OR it was spawned at the max event time - we return it as is
+			if (wavefrontToStraightSkeletonVertexIndices[vertexIndex] != -1)
+			{
+				return wavefrontToStraightSkeletonVertexIndices[vertexIndex];
+			}
+
+			// otherwise, we forward it and spawn it
+			else
+			{
+				ref VertexData vertexData = ref wavefront.vertexDatas[vertexIndex];
+
+				float2 newVertex = wavefront.GetVertexPosAtTime(vertexIndex, time);
+				int newSKVertexIndex = straightSkeleton.AddVertex(newVertex, time);
+				wavefrontToStraightSkeletonVertexIndices[vertexIndex] = newSKVertexIndex;
+				return newSKVertexIndex;
+			}
+		}
+
+		private void AddReflexArcsToSkeleton(List<Edge> newEdges)
 		{
 			// nothing got split - we don't do anything, because the split got cancelled (probably because it occured in a previous simultaneous event)
-			if (newVertexIndices.Count == 0) return;
+			if (newEdges.Count == 0) return;
 
 			// create one new vertex and map the rest to this new one
 			EnsureWavefrontMappingCapacity();
 			bool first = true;
 			int newSKVertexIndex = -1;
-			foreach (int vertexIndex in newVertexIndices)
+			foreach (Edge edge in newEdges)
 			{
 				// this might be an intermediate vertex from the split event that was immediately discarded afterwards
-				if (!wavefront.vertexDatas[vertexIndex].inWavefront) continue;
+				if (!wavefront.vertexDatas[edge.nextVertexIndex].inWavefront) continue;
 
 				if (first)
 				{
-					float2 newVertex = wavefront.vertices[vertexIndex];
-					newSKVertexIndex = straightSkeleton.AddVertex(newVertex, wavefront.GetVertexTime(vertexIndex));
+					float2 newVertex = wavefront.vertices[edge.nextVertexIndex];
+					newSKVertexIndex = straightSkeleton.AddVertex(newVertex, wavefront.GetVertexTime(edge.nextVertexIndex));
 					first = false;
 				}
 
 				if (newSKVertexIndex == -1) throw new InvalidOperationException($"New SK Vertex should have been assigned by now.");
-				wavefrontToStraightSkeletonVertexIndices[vertexIndex] = newSKVertexIndex;
+				wavefrontToStraightSkeletonVertexIndices[edge.nextVertexIndex] = newSKVertexIndex;
 			}
 
 			// for each reflex vertex, we draw an arc to the new split point
-			for (int i = 0; i < splitVertexIndices.Count; ++i)
+			for (int i = 0; i < newEdges.Count; ++i)
 			{
-				int vertexIndex = splitVertexIndices[i];
+				var edge = newEdges[i];
 
-				int reflexSKVertexIndex = wavefrontToStraightSkeletonVertexIndices[vertexIndex];
-				float2 oldPos = straightSkeleton.vertices[reflexSKVertexIndex];
-				float2 newPos = straightSkeleton.vertices[newSKVertexIndex];
+				int prevSKVertexIndex = GetStraightSkeletonVertexAtCreationTime(edge.prevVertexIndex);
+				int nextSKVertexIndex = GetStraightSkeletonVertexAtCreationTime(edge.nextVertexIndex);
+				if (prevSKVertexIndex == -1) throw new InvalidOperationException($"Wavefront has an invalid vertex {edge.prevVertexIndex} that wasn't added to the straight skeleton before!");
+				if (nextSKVertexIndex == -1) throw new InvalidOperationException($"Wavefront has an invalid vertex {edge.nextVertexIndex} that wasn't added to the straight skeleton before!");
 
-				if (math.distancesq(oldPos, newPos) > Geometry.EPSSQ)
-				{
-					straightSkeleton.AddEdge(reflexSKVertexIndex, newSKVertexIndex);
-				}
+				// see if this warrants an edge
+				float2 prevSKVertex = straightSkeleton.vertices[prevSKVertexIndex];
+				float2 nextSKVertex = straightSkeleton.vertices[nextSKVertexIndex];
+
+				// add the edges to the straight skeleton
+				if (math.distance(prevSKVertex, nextSKVertex) > Geometry.EPS) straightSkeleton.AddEdge(prevSKVertexIndex, nextSKVertexIndex);
 			}
 		}
 
@@ -479,8 +510,6 @@ namespace Briganti.StraightSkeletonGeneration
 
 			// remove the nook from the wavefront
 			wavefront.RemoveNook(eventEdgeIndex);
-
-
 
 			// this is easy - just spawn the edge, since the vertices already exist
 			int prevSKVertexIndex = GetStraightSkeletonVertexAtTime(edge.prevVertexIndex, edgeEvent.eventTime);
@@ -536,32 +565,6 @@ namespace Briganti.StraightSkeletonGeneration
 				wavefrontToStraightSkeletonVertexIndices[vertexIndex] = -1;
 				int endSKVertexIndex = GetStraightSkeletonVertexAtMaxTime(vertexIndex);
 				straightSkeleton.AddEdge(startSKVertexIndex, endSKVertexIndex);
-			}
-		}
-
-		private int GetStraightSkeletonVertexAtMaxTime(int vertexIndex)
-		{
-			return GetStraightSkeletonVertexAtTime(vertexIndex, maxEventTime);
-		}
-
-		private int GetStraightSkeletonVertexAtTime(int vertexIndex, float time)
-		{
-			ref VertexData vertexData = ref wavefront.vertexDatas[vertexIndex];
-
-			// if there is a mapping, this means we already forwarded the vertex,
-			// OR it was spawned at the max event time - we return it as is
-			if (wavefrontToStraightSkeletonVertexIndices[vertexIndex] != -1)
-			{
-				return wavefrontToStraightSkeletonVertexIndices[vertexIndex];
-			}
-
-			// otherwise, we forward it and spawn it
-			else
-			{
-				float2 newVertex = wavefront.GetVertexPosAtTime(vertexIndex, time);
-				int newSKVertexIndex = straightSkeleton.AddVertex(newVertex, time);
-				wavefrontToStraightSkeletonVertexIndices[vertexIndex] = newSKVertexIndex;
-				return newSKVertexIndex;
 			}
 		}
 
