@@ -25,7 +25,6 @@ namespace Briganti.StraightSkeletonGeneration
 
 		private HashSet<int> affectedEdges = new HashSet<int>();
 		private HashSet<int> affectedVertices = new HashSet<int>();
-		private HashSet<int> newVertices = new HashSet<int>();
 
 		private bool debug;
 
@@ -142,11 +141,11 @@ namespace Briganti.StraightSkeletonGeneration
 			if (nextVertexData.prevEdgeIndex != disappearedEdgeIndex) throw new ArgumentException($"Vertex {disappearedEdge.nextVertexIndex} is not properly linked to edge {disappearedEdgeIndex}");
 
 			// we flag that these vertices were removed from the wavefront, since they merged into a new vertex
-			RemoveFromWavefront(disappearedEdge.prevVertexIndex);
-			RemoveFromWavefront(disappearedEdge.nextVertexIndex);
+			RemoveVertexFromWavefront(disappearedEdge.prevVertexIndex);
+			RemoveVertexFromWavefront(disappearedEdge.nextVertexIndex);
 
 			// the edge got permanently removed from the wavefront at this point
-			edgeEvent.eventType = EventType.NotInWavefront;
+			RemoveEdgeFromWavefront(disappearedEdgeIndex);
 
 			int prevEdgeIndex = prevVertexData.prevEdgeIndex;
 			int nextEdgeIndex = nextVertexData.nextEdgeIndex;
@@ -176,7 +175,7 @@ namespace Briganti.StraightSkeletonGeneration
 			ref Edge edge = ref edges[edgeIndex];
 
 			// the edge got permanently removed from the wavefront at this point
-			edgeEvent.eventType = EventType.NotInWavefront;
+			RemoveEdgeFromWavefront(edgeIndex);
 			lastEventTime = Mathf.Max(lastEventTime, edgeEvent.eventTime);
 
 			// we also remove the OTHER edge of this nook from the wavefront
@@ -184,11 +183,11 @@ namespace Briganti.StraightSkeletonGeneration
 			ref var otherEdgeEvent = ref edgeEvents[prevVertexData.prevEdgeIndex];
 			ref var otherEdge = ref edges[prevVertexData.prevEdgeIndex];
 			if (debug && (edge.prevVertexIndex != otherEdge.nextVertexIndex || edge.nextVertexIndex != otherEdge.prevVertexIndex)) throw new ArgumentException($"Edges {edge} and {otherEdge} do not form a nook!");
-			otherEdgeEvent.eventType = EventType.NotInWavefront;
+			RemoveEdgeFromWavefront(prevVertexData.prevEdgeIndex);
 
 			// remove the edge from the wavefront (and along it also the other edge that forms the same nook)
-			RemoveFromWavefront(edge.prevVertexIndex);
-			RemoveFromWavefront(edge.nextVertexIndex);
+			RemoveVertexFromWavefront(edge.prevVertexIndex);
+			RemoveVertexFromWavefront(edge.nextVertexIndex);
 		}
 
 		public int SplitEdge(int splitEdgeIndex)
@@ -209,7 +208,7 @@ namespace Briganti.StraightSkeletonGeneration
 			if (debug) Debug.Log($"Split edge {splitEdgeIndex} at position {pos} in preparation for a split event.");
 
 			// the edge got permanently removed from the wavefront at this point
-			edgeEvent.eventType = EventType.NotInWavefront;
+			RemoveEdgeFromWavefront(splitEdgeIndex);
 			ref Edge oldEdge = ref edges[splitEdgeIndex];
 
 			// create a new vertex at the split point
@@ -264,7 +263,7 @@ namespace Briganti.StraightSkeletonGeneration
 				ref VertexData currVertexData = ref vertexDatas[currVertexIndex];
 
 				// we kill this vertex and spawn a new one at the event position
-				RemoveFromWavefront(currVertexIndex);
+				RemoveVertexFromWavefront(currVertexIndex);
 
 				// spawn a new vertex at the event position
 				int newVertexIndex = AddVertex(pos);
@@ -292,6 +291,14 @@ namespace Briganti.StraightSkeletonGeneration
 		{
 			// update the vertex itself
 			ref var vertexData = ref vertexDatas[vertexIndex];
+
+			// the old connected edges are affected since they might be disconnected
+			if (vertexData.type != WavefrontVertexType.Unknown)
+			{
+				affectedEdges.Add(vertexData.prevEdgeIndex);
+				affectedEdges.Add(vertexData.nextEdgeIndex);
+			}
+
 			vertexData.UpdateConnections(prevVertexIndex, nextVertexIndex, prevEdgeIndex, nextEdgeIndex);
 
 			// also update the adjacent edges
@@ -306,24 +313,41 @@ namespace Briganti.StraightSkeletonGeneration
 
 			// remember these are affected by graph changes, so we can update them later
 			affectedVertices.Add(vertexIndex);
-			affectedVertices.Add(prevVertexIndex);
-			affectedVertices.Add(nextVertexIndex);
+			//affectedVertices.Add(prevVertexIndex);
+			//affectedVertices.Add(nextVertexIndex);
 
+			// the newly connected edges are affected
 			affectedEdges.Add(prevEdgeIndex);
 			affectedEdges.Add(nextEdgeIndex);
 		}
 
-		private void RemoveFromWavefront(int vertexIndex)
+		private void RemoveVertexFromWavefront(int vertexIndex)
 		{
 			ref VertexData vertexData = ref vertexDatas[vertexIndex];
 			vertexData.inWavefront = false;
+
+			// if this reflex vertex splits an edge, that edge is affected and we flag it so
+			if (vertexData.partOfSplitEvent)
+			{
+				affectedEdges.Add(vertexData.splitEdge);
+			}
 		}
+
+		private void RemoveEdgeFromWavefront(int edgeIndex)
+		{
+			ref EdgeEvent edgeEvent = ref edgeEvents[edgeIndex];
+			edgeEvent.eventType = EventType.NotInWavefront;
+
+			// if we are being split by a vertex, that vertex is being affected by us disappearing, so we flag it so
+			if (edgeEvent.reflexVertexIndex != -1) affectedVertices.Add(edgeEvent.reflexVertexIndex);
+		}
+
 
 		public void UpdateWavefront(float time)
 		{
 			// disable optimizations for now to see if the core algorithm actually works
-			UpdateEntireWavefront(time);
-			return;
+			/*UpdateEntireWavefront(time);
+			return;*/
 
 			// first, make sure all vertices know their velocity etc
 			foreach (int vertexIndex in affectedVertices)
@@ -379,7 +403,6 @@ namespace Briganti.StraightSkeletonGeneration
 			}
 
 			affectedVertices.Clear();
-			newVertices.Clear();
 			affectedEdges.Clear();
 		}
 
