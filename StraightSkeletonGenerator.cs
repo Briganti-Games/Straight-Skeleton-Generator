@@ -41,7 +41,7 @@ namespace Briganti.StraightSkeletonGeneration
 			wavefront = new WavefrontGraph(polygonWithHoles, this, debug);
 
 			// generate the event queue
-			eventQueue = new FastStructPriorityQueue<int>(wavefront.maxVertices);
+			eventQueue = new FastStructPriorityQueue<int>(wavefront.maxEdges);
 
 			// we keep track of a mapping of vertex indices in the wavefront to vertex indices in the straight skeleton
 			// this is because there might be multiple vertices in the same spot in the wavefront (for split events)
@@ -211,7 +211,7 @@ namespace Briganti.StraightSkeletonGeneration
 			}
 
 			// validate the graph to catch bugs early
-			Debug.Log("Wavefront consists of " + wavefront.nVertices + " vertices and " + wavefront.nEdges + " edges, while straight skeleton consists of " + straightSkeleton.nVertices + " vertices and " + straightSkeleton.nEdges + " edges");
+			//Debug.Log("Wavefront consists of " + wavefront.nVertices + " vertices and " + wavefront.nEdges + " edges, while straight skeleton consists of " + straightSkeleton.nVertices + " vertices and " + straightSkeleton.nEdges + " edges");
 			wavefront.ValidateState(time);
 		}
 
@@ -233,6 +233,8 @@ namespace Briganti.StraightSkeletonGeneration
 
 		public void AddOrUpdateEdgeEvent(int edgeIndex)
 		{
+			Profiler.BeginSample("EventQueue.AddOrUpdateEdgeEvent");
+
 			ref EdgeEvent edgeEvent = ref wavefront.edgeEvents[edgeIndex];
 
 			// could be removed and in the batch to be processed at this point
@@ -256,6 +258,8 @@ namespace Briganti.StraightSkeletonGeneration
 				eventQueue.Enqueue(edgeIndex, edgeEvent.eventTime, out int queueId);
 				edgeEvent.queueId = queueId;
 			}
+
+			Profiler.EndSample();
 		}
 
 		private void ProcessNonBatchEvent(int edgeIndex)

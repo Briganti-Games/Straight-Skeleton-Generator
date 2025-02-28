@@ -29,7 +29,8 @@ namespace Briganti.StraightSkeletonGeneration
 
 		public void Reset()
 		{
-			eventType = EventType.None;
+			// we never go back to being in the wavefront after being deleted from it
+			if (eventType != EventType.NotInWavefront) eventType = EventType.None;
 			eventTime = float.MaxValue;
 			reflexVertexIndex = -1;
 		}
