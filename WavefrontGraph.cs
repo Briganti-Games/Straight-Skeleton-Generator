@@ -313,8 +313,6 @@ namespace Briganti.StraightSkeletonGeneration
 
 			// remember these are affected by graph changes, so we can update them later
 			affectedVertices.Add(vertexIndex);
-			//affectedVertices.Add(prevVertexIndex);
-			//affectedVertices.Add(nextVertexIndex);
 
 			// the newly connected edges are affected
 			affectedEdges.Add(prevEdgeIndex);
