@@ -34,6 +34,23 @@ namespace Briganti.StraightSkeletonGeneration
 			maxEdgesStartingFromVertex = vertexDegrees.Max();
 		}
 
+		private struct TriangulationNode
+		{
+			public TriangulationNode(int idx, float2 coord, int prev, int next)
+			{
+				this.idx = idx;
+				this.coord = coord;
+				this.prev = prev;
+				this.next = next;
+			}
+
+			public int idx;
+			public float2 coord;
+			public int prev;
+			public int next;
+		}
+		private TriangulationNode[] triangulation = new TriangulationNode[32];
+
 		public Mesh GenerateRoofMesh(float maxTimeHeight = 1, float texCoordScale = 1)
 		{
 			List<Vector3> meshVertices = new List<Vector3>();
@@ -57,52 +74,116 @@ namespace Briganti.StraightSkeletonGeneration
 				Slab slab = slabs[slabIndex];
 				if (slab.indices.Count < 3) throw new ArgumentException($"Slab {string.Join(" -> ", slab.indices)} does not the minimum of 3 vertices to form a triangle mesh.");
 
-				float2 origin = straightSkeleton.vertices[slab.indices[0]];
-				float2 dir = math.normalize(origin - straightSkeleton.vertices[slab.indices[slab.indices.Count - 1]]);
-				float2 perp = new float2(dir.y, -dir.x);
-
-				List<Vector2> slabVertices = new List<Vector2>(slab.indices.Count);
-				for (int i = 0; i < slab.indices.Count; ++i)
-				{
-					int vertexIndex = slab.indices[i];
-
-					float2 vertex = straightSkeleton.vertices[vertexIndex];
-					float time = straightSkeleton.vertexTimes[vertexIndex];
-
-					Vector2 slabVertex = new Vector2(vertex.x, vertex.y);
-					slabVertices.Add(slabVertex);
-
-					float y = time / straightSkeleton.maxTime * maxTimeHeight;
-					Vector3 meshVertex = new Vector3(vertex.x, y, vertex.y);
-					meshVertices.Add(meshVertex);
-
-					float2 relative = vertex - origin;
-					meshUVs.Add(new Vector2(math.dot(relative, dir), math.dot(relative, perp) * texCoordScale));
-				}
-
-				// calculate the normal for this slab, which is uniform along all its vertices
-				int v1 = startMeshIndex;
-				int v2 = startMeshIndex + 1;
-				int v3 = startMeshIndex + 2;
-				Vector3 normal = Vector3.Cross(meshVertices[v2] - meshVertices[v1], meshVertices[v3] - meshVertices[v1]);
-				for (int i = 0; i < slab.indices.Count; ++i)
-				{
-					meshNormals.Add(normal);
-				}
-
 				try
 				{
-					Polygon polygon = new Polygon(slabVertices);
+					int vertCount = slab.indices.Count;
+					if (vertCount < 3) continue;
+
+					if (vertCount > triangulation.Length)
+					{
+						triangulation = new TriangulationNode[vertCount];
+					}
+
+					float2 origin = straightSkeleton.vertices[slab.indices[0]];
+					float2 dir = math.normalize(origin - straightSkeleton.vertices[slab.indices[slab.indices.Count-1]]);
+					float2 perp = new float2(dir.y, -dir.x);
+					int offset = meshVertices.Count;
+					for (int i = 0; i < vertCount; i++)
+					{
+						int next = (i + 1) % vertCount;
+						int prev = (i + vertCount - 1) % vertCount;
+
+						float2 pos = straightSkeleton.vertices[slab.indices[i]];
+						float time = straightSkeleton.vertexTimes[slab.indices[i]];
+						float y = time / straightSkeleton.maxTime * maxTimeHeight;
+
+						float2 relative = pos - origin;
+						triangulation[i] = new TriangulationNode(offset + i, pos, prev, next);
+						meshVertices.Add(new Vector3(pos.x, y, pos.y));
+						meshUVs.Add(new Vector2(math.dot(relative, dir), math.dot(relative, perp) * texCoordScale));
+					}
+
+					// Quick and dirty ear clipping algorithm
+					int remainingCount = vertCount;
+					int outer = 0;
+				ProcessNext:
+					if (remainingCount > 2)
+					{
+						for (int i = 0; i < remainingCount; i++)
+						{
+							TriangulationNode node = triangulation[outer];
+							TriangulationNode next = triangulation[node.next];
+							TriangulationNode prev = triangulation[node.prev];
+							float2 c0 = node.coord;
+							float2 c1 = next.coord;
+							float2 c2 = prev.coord;
+							float2 d0 = c1 - c0;
+							float2 d2 = c0 - c2;
+							float2 p2 = new float2(d2.y, -d2.x);
+							if (math.dot(p2, d0) > 0)
+							{
+								if (remainingCount > 3)
+								{
+									float2 d1 = c2 - c1;
+									float2 p0 = new float2(d0.y, -d0.x);
+									float2 p1 = new float2(d1.y, -d1.x);
+									int otherCount = remainingCount - 3;
+									int inner = next.next;
+									for (int j = 0; j < otherCount; j++)
+									{
+										float2 p = triangulation[inner].coord;
+										if (math.dot(p - c0, p0) > 0)
+										{
+											if (math.dot(p - c1, p1) > 0)
+											{
+												if (math.dot(p - c2, p2) > 0)
+												{
+													goto Skip;
+												}
+											}
+										}
+										inner = triangulation[inner].next;
+									}
+								}
+
+								meshTriangles.Add(node.idx);
+								meshTriangles.Add(next.idx);
+								meshTriangles.Add(prev.idx);
+
+								triangulation[node.next].prev = node.prev;
+								triangulation[node.prev].next = node.next;
+								outer = node.next;
+
+								remainingCount--;
+								goto ProcessNext;
+							}
+
+						Skip:
+							outer = node.next;
+						}
+					}
+
+					// calculate the normal for this slab, which is uniform along all its vertices
+					int v1 = startMeshIndex;
+					int v2 = startMeshIndex + 1;
+					int v3 = startMeshIndex + 2;
+					Vector3 normal = Vector3.Cross(meshVertices[v2] - meshVertices[v1], meshVertices[v3] - meshVertices[v1]);
+					for (int i = 0; i < slab.indices.Count; ++i)
+					{
+						meshNormals.Add(normal);
+					}
+
+					/*Polygon polygon = new Polygon(slabVertices);
 					int[] triangleIndices = Triangulation.Triangulate(polygon);
 					for (int i = 0; i < triangleIndices.Length; i += 3)
 					{
 						AddTriangle(startMeshIndex + triangleIndices[i], startMeshIndex + triangleIndices[i + 1], startMeshIndex + triangleIndices[i + 2]);
-					}
+					}*/
 				}
 				catch (NotImplementedException e)
 				{
 					// we failed to triangulate - we print an error but we proceed
-					Debug.Log($"Failed to triangulate slab {string.Join(" -> ", slabVertices)} with indices {string.Join(" -> ", slab.indices)}: {e.Message}");
+					Debug.Log($"Failed to triangulate slab {string.Join(" -> ", slab.indices)}: {e.Message}");
 				}
 			}
 
