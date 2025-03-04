@@ -57,10 +57,11 @@ namespace Briganti.StraightSkeletonGeneration
 			int nStraightSkeletonVertices = wavefront.nVertices + (wavefront.nVertices);
 
 			// count the number of possible edges in the straight skeleton
-			int nStraightSkeletonEdges = wavefront.nEdges; // each initial edge is one
-			nStraightSkeletonEdges += (2 * wavefront.nVertices) - 3; // then this is the max number that can occur because of edge events
+			int nStartEdges = wavefront.nEdges; // each initial edge is one
+			int nStraightSkeletonEdges = (2 * wavefront.nVertices) - 3; // then this is the max number that can occur because of edge events
+			//nStraightSkeletonEdges *= 2; // we multiply by two because we add every edge bidirectionally
 			nStraightSkeletonEdges += wavefront.nEdges; // there is a worst-case chance that every edge will be reproduced again because no edge events occur before the maxEventTime
-			straightSkeleton = new StraightSkeleton(nStraightSkeletonVertices, nStraightSkeletonEdges);
+			straightSkeleton = new StraightSkeleton(nStraightSkeletonVertices, nStraightSkeletonEdges + nStartEdges);
 			for (int i = 0; i < wavefront.nVertices; ++i)
 			{
 				straightSkeleton.AddVertex(wavefront.vertices[i], 0);
@@ -344,8 +345,15 @@ namespace Briganti.StraightSkeletonGeneration
 				float2 nextSKVertex = straightSkeleton.vertices[nextSKVertexIndex];
 
 				// add the edges to the straight skeleton
-				if (math.distance(prevSKVertex, newVertex) > Geometry.EPS) straightSkeleton.AddEdge(prevSKVertexIndex, newSKVertexIndex);
-				if (math.distance(nextSKVertex, newVertex) > Geometry.EPS) straightSkeleton.AddEdge(newSKVertexIndex, nextSKVertexIndex);
+				if (math.distance(prevSKVertex, newVertex) > Geometry.EPS)
+				{
+
+					AddStraightSkeletonArc(prevSKVertexIndex, newSKVertexIndex);
+				}
+				if (math.distance(nextSKVertex, newVertex) > Geometry.EPS)
+				{
+					AddStraightSkeletonArc(newSKVertexIndex, nextSKVertexIndex);
+				}
 			}
 		}
 
@@ -408,25 +416,6 @@ namespace Briganti.StraightSkeletonGeneration
 			// now add all the reflex arcs that were created to the skeleton
 			EnsureWavefrontMappingCapacity();
 			AddReflexArcsToSkeleton(newStraightSkeletonEdges);
-
-			// finally add, for each vertex event, an additional arc in the straight skeleton from the split 
-			// I don't think this is really a thing??
-			/*for (int i = 0; i < eventEdgeIndices.Count; ++i)
-			{
-				int idx = (i + splitListIndex) % eventEdgeIndices.Count;
-
-				int edgeIndex = eventEdgeIndices[idx];
-				ref EdgeEvent edgeEvent = ref wavefront.edgeEvents[edgeIndex];
-				ref VertexData vertexData = ref wavefront.vertexDatas[edgeEvent.reflexVertexIndex];
-
-				if (vertexData.splitPoint != SplitPoint.Edge)
-				{
-					// we need to add the arc from the vertex that was replaced by the new vertices to the skeleton
-					int newSKVertexIndex = wavefrontToStraightSkeletonVertexIndices[newVertexIndices[0]];
-					int splitSKVertexIndex = wavefrontToStraightSkeletonVertexIndices[splitVertexIndex];
-					straightSkeleton.AddEdge(splitSKVertexIndex, newSKVertexIndex);
-				}
-			}*/
 		}
 
 		private int GetStraightSkeletonVertexAtCreationTime(int wavefrontVertexIndex)
@@ -501,7 +490,11 @@ namespace Briganti.StraightSkeletonGeneration
 				float2 nextSKVertex = straightSkeleton.vertices[nextSKVertexIndex];
 
 				// add the edges to the straight skeleton
-				if (math.distance(prevSKVertex, nextSKVertex) > Geometry.EPS) straightSkeleton.AddEdge(prevSKVertexIndex, nextSKVertexIndex);
+				if (math.distance(prevSKVertex, nextSKVertex) > Geometry.EPS)
+				{
+					AddStraightSkeletonArc(prevSKVertexIndex, nextSKVertexIndex);
+
+				}
 			}
 		}
 
@@ -524,7 +517,17 @@ namespace Briganti.StraightSkeletonGeneration
 			float2 nextSKVertex = straightSkeleton.vertices[nextSKVertexIndex];
 
 			// add the edges to the straight skeleton
-			if (math.distance(prevSKVertex, nextSKVertex) > Geometry.EPS) straightSkeleton.AddEdge(prevSKVertexIndex, nextSKVertexIndex);
+			if (math.distance(prevSKVertex, nextSKVertex) > Geometry.EPS)
+			{
+				AddStraightSkeletonArc(prevSKVertexIndex, nextSKVertexIndex);
+			}
+		}
+
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		private void AddStraightSkeletonArc(int skVertexIndex1, int skVertexIndex2)
+		{
+			straightSkeleton.AddEdge(skVertexIndex1, skVertexIndex2);
+
 		}
 
 		private void SpawnRemainingEdgesAtMaxTime(int firstOverTimeEdgeIndex)
@@ -556,7 +559,7 @@ namespace Briganti.StraightSkeletonGeneration
 			// if the vertex was spawned in the past, we spawn an up-to-date version at the max time
 			int prevSKVertexIndexAtMaxTime = GetStraightSkeletonVertexAtMaxTime(edge.prevVertexIndex);
 			int nextSKVertexIndexAtMaxTime = GetStraightSkeletonVertexAtMaxTime(edge.nextVertexIndex);
-			straightSkeleton.AddEdge(prevSKVertexIndexAtMaxTime, nextSKVertexIndexAtMaxTime);
+			AddStraightSkeletonArc(prevSKVertexIndexAtMaxTime, nextSKVertexIndexAtMaxTime);
 
 		}
 
@@ -568,7 +571,7 @@ namespace Briganti.StraightSkeletonGeneration
 				int startSKVertexIndex = wavefrontToStraightSkeletonVertexIndices[vertexIndex];
 				wavefrontToStraightSkeletonVertexIndices[vertexIndex] = -1;
 				int endSKVertexIndex = GetStraightSkeletonVertexAtMaxTime(vertexIndex);
-				straightSkeleton.AddEdge(startSKVertexIndex, endSKVertexIndex);
+				AddStraightSkeletonArc(startSKVertexIndex, endSKVertexIndex);
 			}
 		}
 

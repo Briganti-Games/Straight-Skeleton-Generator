@@ -16,6 +16,8 @@ namespace Briganti.StraightSkeletonGeneration
 		public float[] vertexTimes { get; private set; }
 		public int[] wavefrontToStraightSkeletonVertexIndices { get; private set; }
 
+		public float maxTime { get; private set; } = float.MinValue;
+
 		public StraightSkeleton(int maxVertices, int maxEdges) : base(maxVertices, maxEdges)
 		{
 			vertexTimes = new float[maxVertices];
@@ -25,6 +27,7 @@ namespace Briganti.StraightSkeletonGeneration
 		{
 			int vertexIndex = base.AddVertex(pos);
 			vertexTimes[vertexIndex] = time;
+			maxTime = Mathf.Max(maxTime, time);
 			return vertexIndex;
 		}
 
@@ -38,5 +41,33 @@ namespace Briganti.StraightSkeletonGeneration
 			Array.Copy(vertexTimes, newVertexTimes, oldLength);
 			vertexTimes = newVertexTimes;
 		}
+		/*
+		public List<List[]> GetIndices()
+		{
+			Profiler.BeginSample("Biganti.StraightSkeleton.GetIndices");
+			List<List<int>[]> polygons = new List<List<int>[]>();
+
+			bool[] visited = new bool[nEdges];
+			for (int edgeIndex = 0; edgeIndex < nEdges; ++edgeIndex)
+			{
+				if (visited[edgeIndex]) continue;
+
+				visited[edgeIndex] = true;
+				ref var edge = ref edges[edgeIndex];
+
+				List<int> polygon = new List<int>();
+				polygon.Add(edge.prevVertexIndex);
+				polygon.Add(edge.nextVertexIndex);
+
+				ref var nextEdge = ref edges[ver
+
+				
+			}
+
+
+			Profiler.EndSample();
+
+			return polygons;
+		}*/
 	}
 }
