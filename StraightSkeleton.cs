@@ -1,13 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Runtime.CompilerServices;
-using System.Threading;
 using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Profiling;
-using UnityEngine.Rendering;
-using UnityEngine.UI;
 
 namespace Briganti.StraightSkeletonGeneration
 {
@@ -41,33 +36,5 @@ namespace Briganti.StraightSkeletonGeneration
 			Array.Copy(vertexTimes, newVertexTimes, oldLength);
 			vertexTimes = newVertexTimes;
 		}
-		/*
-		public List<List[]> GetIndices()
-		{
-			Profiler.BeginSample("Biganti.StraightSkeleton.GetIndices");
-			List<List<int>[]> polygons = new List<List<int>[]>();
-
-			bool[] visited = new bool[nEdges];
-			for (int edgeIndex = 0; edgeIndex < nEdges; ++edgeIndex)
-			{
-				if (visited[edgeIndex]) continue;
-
-				visited[edgeIndex] = true;
-				ref var edge = ref edges[edgeIndex];
-
-				List<int> polygon = new List<int>();
-				polygon.Add(edge.prevVertexIndex);
-				polygon.Add(edge.nextVertexIndex);
-
-				ref var nextEdge = ref edges[ver
-
-				
-			}
-
-
-			Profiler.EndSample();
-
-			return polygons;
-		}*/
 	}
 }

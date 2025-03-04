@@ -235,7 +235,7 @@ namespace Briganti.StraightSkeletonGeneration
 			return newVertexIndex;
 		}
 
-		public void SplitGraphAtVertices(List<int> vertexIndices, int eventEdgeIndex, List<Edge> newEdges)
+		public void SplitGraphAtVertices(List<int> vertexIndices, int eventEdgeIndex, List<Edge> newEdges, List<int> newVertexIndices)
 		{
 			if (vertexIndices.Count == 0) throw new ArgumentException($"Cannot do a split with 0 vertices.");
 			if (debug) Debug.Log($"Split edges after vertices {string.Join(", ", vertexIndices)} collide");
@@ -267,6 +267,7 @@ namespace Briganti.StraightSkeletonGeneration
 
 				// spawn a new vertex at the event position
 				int newVertexIndex = AddVertex(pos);
+				newVertexIndices.Add(newVertexIndex);
 				vertexDatas[newVertexIndex].creationTime = time;
 
 				// if the old vertex is a reflex vertex or we are a endpoint split, we add a new edge
@@ -539,7 +540,12 @@ namespace Briganti.StraightSkeletonGeneration
 			ref EdgeEvent eventData = ref edgeEvents[edgeIndex];
 
 			// once we're removed from the wavefront, nothing happens to this edge anymore
-			if (eventData.eventType == EventType.NotInWavefront) return;
+			if (eventData.eventType == EventType.NotInWavefront)
+			{
+				// remove from the eventqueue
+				eventTimeListener.AddOrUpdateEdgeEvent(edgeIndex);
+				return;
+			}
 
 			// if we are being split by a vertex, we let that vertex know that the party is cancelled
 			if (eventData.reflexVertexIndex != -1)

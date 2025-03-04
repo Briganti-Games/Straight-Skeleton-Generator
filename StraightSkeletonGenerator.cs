@@ -1,14 +1,10 @@
 ﻿using Briganti.StraightSkeletons.Priority_Queue;
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Runtime.CompilerServices;
-using System.Threading;
 using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Profiling;
-using UnityEngine.Rendering;
-using UnityEngine.UI;
 
 namespace Briganti.StraightSkeletonGeneration
 {
@@ -59,8 +55,8 @@ namespace Briganti.StraightSkeletonGeneration
 			// count the number of possible edges in the straight skeleton
 			int nStartEdges = wavefront.nEdges; // each initial edge is one
 			int nStraightSkeletonEdges = (2 * wavefront.nVertices) - 3; // then this is the max number that can occur because of edge events
-			//nStraightSkeletonEdges *= 2; // we multiply by two because we add every edge bidirectionally
 			nStraightSkeletonEdges += wavefront.nEdges; // there is a worst-case chance that every edge will be reproduced again because no edge events occur before the maxEventTime
+			nStraightSkeletonEdges *= 2; // we add edges in both directions to be able to generate polygon slabs from the straight skeleton more easily
 			straightSkeleton = new StraightSkeleton(nStraightSkeletonVertices, nStraightSkeletonEdges + nStartEdges);
 			for (int i = 0; i < wavefront.nVertices; ++i)
 			{
@@ -126,7 +122,7 @@ namespace Briganti.StraightSkeletonGeneration
 			ref EdgeEvent edgeEvent = ref wavefront.edgeEvents[edgeIndex];
 
 			// we ran out of events in the queue - tap out early
-			if (edgeEvent.eventType == EventType.None) return;
+			if (edgeEvent.eventType == EventType.None || edgeEvent.eventType == EventType.NotInWavefront) return;
 
 			// if this is the first event that is over time, we just go over all remaining edges in the queue and spawn them at their position at maxEventTime
 			if (edgeEvent.eventTime > maxEventTime + Geometry.EPS)
@@ -359,11 +355,13 @@ namespace Briganti.StraightSkeletonGeneration
 
 		private List<Edge> newStraightSkeletonEdges = new List<Edge>();
 		private List<int> splitVertexIndices = new List<int>();
+		private List<int> newVertexIndices = new List<int>();
 		public void ProcessSplitEvent(List<int> eventEdgeIndices)
 		{
 			// we are going to be merging all vertices generated in the wavefront, because their difference don't matter to us
 			newStraightSkeletonEdges.Clear();
 			splitVertexIndices.Clear();
+			newVertexIndices.Clear();
 
 			// first, make sure this is still a valid spit - another split or event might have deleted some of the edges or involved vertices
 			bool splitCancelled = false;
@@ -411,10 +409,26 @@ namespace Briganti.StraightSkeletonGeneration
 
 			// now that we have a bunch of points all at the same position - some reflex vertices, some just split vertices, some endpoints of an edge,
 			// we can actually perform the split of the graph into parts.
-			wavefront.SplitGraphAtVertices(splitVertexIndices, eventEdgeIndices[0], newStraightSkeletonEdges);
+			wavefront.SplitGraphAtVertices(splitVertexIndices, eventEdgeIndices[0], newStraightSkeletonEdges, newVertexIndices);
+
+			// we map every newly created vertex at the split position to the same one in the straight skeleton
+			EnsureWavefrontMappingCapacity();
+			bool first = true;
+			int newSKVertexIndex = -1;
+			foreach (int vertexIndex in newVertexIndices)
+			{
+				if (first)
+				{
+					float2 newVertex = wavefront.vertices[vertexIndex];
+					newSKVertexIndex = straightSkeleton.AddVertex(newVertex, wavefront.GetVertexTime(vertexIndex));
+					first = false;
+				}
+
+				if (newSKVertexIndex == -1) throw new InvalidOperationException($"New SK Vertex should have been assigned by now.");
+				wavefrontToStraightSkeletonVertexIndices[vertexIndex] = newSKVertexIndex;
+			}
 
 			// now add all the reflex arcs that were created to the skeleton
-			EnsureWavefrontMappingCapacity();
 			AddReflexArcsToSkeleton(newStraightSkeletonEdges);
 		}
 
@@ -457,23 +471,6 @@ namespace Briganti.StraightSkeletonGeneration
 
 			// create one new vertex and map the rest to this new one
 			EnsureWavefrontMappingCapacity();
-			bool first = true;
-			int newSKVertexIndex = -1;
-			foreach (Edge edge in newEdges)
-			{
-				// this might be an intermediate vertex from the split event that was immediately discarded afterwards
-				if (!wavefront.vertexDatas[edge.nextVertexIndex].inWavefront) continue;
-
-				if (first)
-				{
-					float2 newVertex = wavefront.vertices[edge.nextVertexIndex];
-					newSKVertexIndex = straightSkeleton.AddVertex(newVertex, wavefront.GetVertexTime(edge.nextVertexIndex));
-					first = false;
-				}
-
-				if (newSKVertexIndex == -1) throw new InvalidOperationException($"New SK Vertex should have been assigned by now.");
-				wavefrontToStraightSkeletonVertexIndices[edge.nextVertexIndex] = newSKVertexIndex;
-			}
 
 			// for each reflex vertex, we draw an arc to the new split point
 			for (int i = 0; i < newEdges.Count; ++i)
@@ -526,7 +523,10 @@ namespace Briganti.StraightSkeletonGeneration
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		private void AddStraightSkeletonArc(int skVertexIndex1, int skVertexIndex2)
 		{
+			if (skVertexIndex1 == -1) throw new ArgumentException($"Trying to generate an arc from non-existing vertex {skVertexIndex1}");
+			if (skVertexIndex2 == -1) throw new ArgumentException($"Trying to generate an arc from non-existing vertex {skVertexIndex2}");
 			straightSkeleton.AddEdge(skVertexIndex1, skVertexIndex2);
+			straightSkeleton.AddEdge(skVertexIndex2, skVertexIndex1);
 
 		}
 
@@ -568,7 +568,7 @@ namespace Briganti.StraightSkeletonGeneration
 			ref VertexData vertexData = ref wavefront.vertexDatas[vertexIndex];
 			if (vertexData.creationTime < maxEventTime - Geometry.EPS)
 			{
-				int startSKVertexIndex = wavefrontToStraightSkeletonVertexIndices[vertexIndex];
+				int startSKVertexIndex = GetStraightSkeletonVertexAtCreationTime(vertexIndex);
 				wavefrontToStraightSkeletonVertexIndices[vertexIndex] = -1;
 				int endSKVertexIndex = GetStraightSkeletonVertexAtMaxTime(vertexIndex);
 				AddStraightSkeletonArc(startSKVertexIndex, endSKVertexIndex);
