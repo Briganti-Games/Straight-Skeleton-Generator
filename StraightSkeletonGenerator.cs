@@ -122,7 +122,12 @@ namespace Briganti.StraightSkeletonGeneration
 			ref EdgeEvent edgeEvent = ref wavefront.edgeEvents[edgeIndex];
 
 			// we ran out of events in the queue - tap out early
-			if (edgeEvent.eventType == EventType.None || edgeEvent.eventType == EventType.NotInWavefront) return;
+			while (edgeEvent.eventType == EventType.None || edgeEvent.eventType == EventType.NotInWavefront)
+			{
+				if (eventQueue.Count == 0) return;
+				edgeIndex = DequeueNextEvent();
+				edgeEvent = ref wavefront.edgeEvents[edgeIndex];
+			}
 
 			// if this is the first event that is over time, we just go over all remaining edges in the queue and spawn them at their position at maxEventTime
 			if (edgeEvent.eventTime > maxEventTime + Geometry.EPS)
