@@ -58,13 +58,6 @@ namespace Briganti.StraightSkeletonGeneration
 			List<int> meshTriangles = new List<int>();
 			List<Vector3> meshNormals = new List<Vector3>();
 
-			void AddTriangle(int v1, int v2, int v3)
-			{
-				meshTriangles.Add(v1);
-				meshTriangles.Add(v2);
-				meshTriangles.Add(v3);
-			}
-
 			List<Slab> slabs = GenerateStraightSkeletonSlabs();
 
 			// first, we need to triangulate the different slabs
@@ -74,6 +67,8 @@ namespace Briganti.StraightSkeletonGeneration
 				Slab slab = slabs[slabIndex];
 				if (slab.indices.Count < 3) throw new ArgumentException($"Slab {string.Join(" -> ", slab.indices)} does not the minimum of 3 vertices to form a triangle mesh.");
 
+
+				// kindly borrowed this ear clipping code from https://github.com/AggroBird/StraightSkeleton
 				try
 				{
 					int vertCount = slab.indices.Count;
@@ -172,13 +167,6 @@ namespace Briganti.StraightSkeletonGeneration
 					{
 						meshNormals.Add(normal);
 					}
-
-					/*Polygon polygon = new Polygon(slabVertices);
-					int[] triangleIndices = Triangulation.Triangulate(polygon);
-					for (int i = 0; i < triangleIndices.Length; i += 3)
-					{
-						AddTriangle(startMeshIndex + triangleIndices[i], startMeshIndex + triangleIndices[i + 1], startMeshIndex + triangleIndices[i + 2]);
-					}*/
 				}
 				catch (NotImplementedException e)
 				{
