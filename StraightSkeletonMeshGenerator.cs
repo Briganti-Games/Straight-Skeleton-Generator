@@ -51,7 +51,7 @@ namespace Briganti.StraightSkeletonGeneration
 		}
 		private TriangulationNode[] triangulation = new TriangulationNode[32];
 
-		public Mesh GenerateRoofMesh(float maxTimeHeight = 1, float texCoordScale = 1)
+		public Mesh GenerateRoofMesh(float heightScale = 1, float texCoordScale = 1)
 		{
 			List<Vector3> meshVertices = new List<Vector3>();
 			List<Vector2> meshUVs = new List<Vector2>();
@@ -90,7 +90,7 @@ namespace Briganti.StraightSkeletonGeneration
 
 						float2 pos = straightSkeleton.vertices[slab.indices[i]];
 						float time = straightSkeleton.vertexTimes[slab.indices[i]];
-						float y = time / straightSkeleton.maxTime * maxTimeHeight;
+						float y = time * heightScale;
 
 						float2 relative = pos - origin;
 						triangulation[i] = new TriangulationNode(offset + i, pos, prev, next);
