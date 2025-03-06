@@ -196,7 +196,7 @@ namespace Briganti.StraightSkeletonGeneration
 				for (int i = eventBatchIndex; i < eventBatches.Count; ++i)
 				{
 					edgeEventsAtSamePos.Add(eventBatches[i]);
-					if (i == eventBatches.Count - 1 || !IsAtSamePos(eventBatches[i], eventBatches[i + 1]))
+					if (i == eventBatches.Count - 1 || !IsSameTypeAtSamePos(eventBatches[i], eventBatches[i + 1]))
 					{
 						ProcessBatchEvents(edgeEventsAtSamePos);
 						eventBatchIndex = i + 1;
@@ -222,15 +222,16 @@ namespace Briganti.StraightSkeletonGeneration
 		{
 			ref EdgeEvent edgeEvent1 = ref wavefront.edgeEvents[edgeIndex1];
 			ref EdgeEvent edgeEvent2 = ref wavefront.edgeEvents[edgeIndex2];
-			return math.abs(edgeEvent1.eventTime - edgeEvent2.eventTime) < Geometry.EPS;
+			return math.abs(edgeEvent1.eventTime - edgeEvent2.eventTime) < Geometry.EPS_LOWPRECISION;
 		}
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		private bool IsAtSamePos(int edgeIndex1, int edgeIndex2)
+		private bool IsSameTypeAtSamePos(int edgeIndex1, int edgeIndex2)
 		{
 			ref EdgeEvent edgeEvent1 = ref wavefront.edgeEvents[edgeIndex1];
 			ref EdgeEvent edgeEvent2 = ref wavefront.edgeEvents[edgeIndex2];
-			return Geometry.CompareTo(edgeEvent1.eventPos, edgeEvent2.eventPos) == 0;
+			if (edgeEvent1.eventType != edgeEvent2.eventType) return false;
+			return Geometry.CompareToLowPrecision(edgeEvent1.eventPos, edgeEvent2.eventPos) == 0;
 		}
 
 		public void AddOrUpdateEdgeEvent(int edgeIndex)

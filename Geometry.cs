@@ -8,6 +8,7 @@ namespace Briganti.StraightSkeletonGeneration
 {
 	public class Geometry
 	{
+		public const float EPS_LOWPRECISION = 0.01f;//0.01f;
 		public const float EPS = 0.0001f;
 		public const float EPSSQ = EPS * EPS;
 
@@ -190,6 +191,21 @@ namespace Briganti.StraightSkeletonGeneration
 			// arbitrary ordening to make sure that 2 semi-identical points end up next to each other after sorting
 			if (math.abs(v1.x - v2.x) < EPS) {
 				if (math.abs(v1.y - v2.y) < EPS)
+				{
+					return 0;
+				}
+				else return v1.y.CompareTo(v2.y);
+			}
+			else return v1.x.CompareTo(v2.x);
+		}
+
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public static int CompareToLowPrecision(float2 v1, float2 v2)
+		{
+			// arbitrary ordening to make sure that 2 semi-identical points end up next to each other after sorting
+			if (math.abs(v1.x - v2.x) < EPS_LOWPRECISION)
+			{
+				if (math.abs(v1.y - v2.y) < EPS_LOWPRECISION)
 				{
 					return 0;
 				}

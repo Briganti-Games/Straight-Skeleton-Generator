@@ -697,7 +697,7 @@ namespace Briganti.StraightSkeletonGeneration
 
 			// if, at the exact same time, the reflex vertex is reduced because it is also part of an edge event, we ignore this split,
 			// because it will be invalid, since the reflex vertex will be desolved in the split event before it can split anything.
-			//if (IsDestroyedByEdgeEventBefore(vertexData, eventTime)) return;
+			if (IsDestroyedByEdgeEventBefore(vertexData, eventTime)) return;
 
 			// if the reflex vertex lies ON the prev or next vertex, we have an immediate-time vertex split
 			if (math.distancesq(prevVertex, reflexVertex) < Geometry.EPSSQ || math.distancesq(nextVertex, reflexVertex) < Geometry.EPSSQ)
@@ -778,10 +778,10 @@ namespace Briganti.StraightSkeletonGeneration
 		private bool IsDestroyedByEdgeEventBefore(in VertexData vertexData, float eventTime)
 		{
 			ref EdgeEvent prevEdge = ref edgeEvents[vertexData.prevEdgeIndex];
-			if (prevEdge.eventType == EventType.Edge && prevEdge.eventTime < eventTime + Geometry.EPS) return true;
+			if (prevEdge.eventType == EventType.Edge && prevEdge.eventTime < eventTime + Geometry.EPS_LOWPRECISION) return true;
 
 			ref EdgeEvent nextEdge = ref edgeEvents[vertexData.nextEdgeIndex];
-			if (nextEdge.eventType == EventType.Edge && nextEdge.eventTime < eventTime + Geometry.EPS) return true;
+			if (nextEdge.eventType == EventType.Edge && nextEdge.eventTime < eventTime + Geometry.EPS_LOWPRECISION) return true;
 
 			return false;
 		}
