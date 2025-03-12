@@ -376,6 +376,18 @@ namespace Briganti.StraightSkeletonGeneration
 					splitCancelled = true;
 					break;
 				}
+				else
+				{
+					
+					// it can also happen that the vertex that is causing the split, has been deleted by an edge event before - we ignore this split as well!
+					ref var edgeEvent = ref wavefront.edgeEvents[edgeIndex];
+					int vertexIndex = edgeEvent.reflexVertexIndex;
+					if (vertexIndex == -1)
+					{
+						splitCancelled = true;
+						break;
+					}
+				}
 			}
 
 			if (splitCancelled) return;
