@@ -344,10 +344,6 @@ namespace Briganti.StraightSkeletonGeneration
 
 		public void UpdateWavefront(float time)
 		{
-			// disable optimizations for now to see if the core algorithm actually works
-			/*UpdateEntireWavefront(time);
-			return;*/
-
 			// first, make sure all vertices know their velocity etc
 			foreach (int vertexIndex in affectedVertices)
 			{

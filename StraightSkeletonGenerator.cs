@@ -206,11 +206,8 @@ namespace Briganti.StraightSkeletonGeneration
 			}
 
 			// if we emptied the entire set of events that happened at the same time, we update the wavefront
-			if (IsEventBatchesEmpty())
-			{
-				time = edgeEvent.eventTime;
-				wavefront.UpdateWavefront(time);
-			}
+			time = edgeEvent.eventTime;
+			wavefront.UpdateWavefront(time);
 
 			// validate the graph to catch bugs early
 			//Debug.Log("Wavefront consists of " + wavefront.nVertices + " vertices and " + wavefront.nEdges + " edges, while straight skeleton consists of " + straightSkeleton.nVertices + " vertices and " + straightSkeleton.nEdges + " edges");
