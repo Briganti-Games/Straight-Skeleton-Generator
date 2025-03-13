@@ -484,17 +484,21 @@ namespace Briganti.StraightSkeletonGeneration
 				float2 nextVertex = GetVertexPosAtTime(vertexData.nextVertexIndex, time);
 
 				float2 velocity = CalculateVelocity(prevVertex, vertex, nextVertex);
-				bool isReflex = Geometry.IsRelfexVertex(prevVertex, vertex, nextVertex);
-				var type = (isReflex ? WavefrontVertexType.Reflex : WavefrontVertexType.Convex);
-
-				// the vertex lies on a parallel line - we can't calculate a real velocity
-				if (Geometry.IsParallelLines(prevVertex, vertex, prevVertex, nextVertex))
+				WavefrontVertexType type = WavefrontVertexType.Convex;
+				if (math.length(velocity) > Geometry.EPS)
 				{
-					// not sure yet if there's an actual use case where a vertex in this situation is actually a real reflex vertex
-					if (math.distancesq(prevVertex, nextVertex) < Geometry.EPSSQ)
+					bool isReflex = Geometry.IsRelfexVertex(prevVertex, vertex, nextVertex);
+					type = (isReflex ? WavefrontVertexType.Reflex : WavefrontVertexType.Convex);
+
+					// the vertex lies on a parallel line - we can't calculate a real velocity
+					if (Geometry.IsParallelLines(prevVertex, vertex, prevVertex, nextVertex))
 					{
-						velocity = float2.zero;
-						type = WavefrontVertexType.Convex;
+						// not sure yet if there's an actual use case where a vertex in this situation is actually a real reflex vertex
+						if (math.distancesq(prevVertex, nextVertex) < Geometry.EPSSQ)
+						{
+							velocity = float2.zero;
+							type = WavefrontVertexType.Convex;
+						}
 					}
 				}
 
