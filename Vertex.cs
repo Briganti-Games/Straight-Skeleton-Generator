@@ -6,8 +6,8 @@ namespace Briganti.StraightSkeletonGeneration
 	{
 		None,
 		Edge,
-		Split,
 		Nook,
+		VertexSplit,
 		NotInWavefront,
 	}
 
@@ -15,7 +15,7 @@ namespace Briganti.StraightSkeletonGeneration
 	{
 		public static bool IsBatchEvent(this EventType eventType)
 		{
-			return eventType == EventType.Edge || eventType == EventType.Split;
+			return eventType == EventType.Edge || eventType == EventType.VertexSplit;
 		}
 
 		public static bool IsValid(this EventType eventType)
