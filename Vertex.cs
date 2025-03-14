@@ -17,6 +17,11 @@ namespace Briganti.StraightSkeletonGeneration
 		{
 			return eventType == EventType.Edge || eventType == EventType.Split;
 		}
+
+		public static bool IsValid(this EventType eventType)
+		{
+			return eventType != EventType.None && eventType != EventType.NotInWavefront;
+		}
 	}
 
 
