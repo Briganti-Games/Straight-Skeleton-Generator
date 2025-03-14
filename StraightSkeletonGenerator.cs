@@ -93,7 +93,8 @@ namespace Briganti.StraightSkeletonGeneration
 
 		private bool IsEventBatchesEmpty()
 		{
-			return eventBatchIndex == eventBatches.Count;
+			// events can be removed from the event batch, so we can suddenly be further than the number of eventbatches
+			return eventBatchIndex >= eventBatches.Count;
 		}
 
 		public StraightSkeleton Generate()
@@ -249,6 +250,14 @@ namespace Briganti.StraightSkeletonGeneration
 			Profiler.BeginSample("EventQueue.AddOrUpdateEdgeEvent");
 
 			ref EdgeEvent edgeEvent = ref wavefront.edgeEvents[edgeIndex];
+
+			// if we are in the current event batch and we moved back in time from the current time, we remove ourselves from the batch
+			// this means that a previous event in the batch has changed our event time, and we are not ready to be handled just yet.
+			int eventBatchIndex = eventBatches.IndexOf(edgeIndex);
+			if (eventBatchIndex != -1 && eventBatchIndex >= this.eventBatchIndex && edgeEvent.eventTime >= time + Geometry.EPS_LOWPRECISION)
+			{
+				eventBatches.RemoveAt(eventBatchIndex);
+			}
 
 			// could be removed and in the batch to be processed at this point
 			if (eventQueue.Contains(edgeEvent.queueId))
