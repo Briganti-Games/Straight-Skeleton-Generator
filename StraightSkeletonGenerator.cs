@@ -148,7 +148,7 @@ namespace Briganti.StraightSkeletonGeneration
 			}
 
 			// we now sort the events by their event pos - that way, we can create only one vertex for each set of edge events that end at the same position
-			eventBatches.Sort((v1, v2) => CompareEdgeEvent(v1, v2));
+			//eventBatches.Sort((v1, v2) => CompareEdgeEvent(v1, v2));
 		}
 
 		private int DequeueNextEvent()
@@ -193,7 +193,7 @@ namespace Briganti.StraightSkeletonGeneration
 			else
 			{
 				edgeEventsAtSamePos.Clear();
-				for (int i = eventBatchIndex; i < eventBatches.Count; ++i)
+				/*for (int i = eventBatchIndex; i < eventBatches.Count; ++i)
 				{
 					edgeEventsAtSamePos.Add(eventBatches[i]);
 					if (i == eventBatches.Count - 1 || !IsSameTypeAtSamePos(eventBatches[i], eventBatches[i + 1]))
@@ -202,7 +202,20 @@ namespace Briganti.StraightSkeletonGeneration
 						eventBatchIndex = i + 1;
 						break;
 					}
+				}*/
+
+				edgeEventsAtSamePos.Add(eventBatches[eventBatchIndex]);
+				for (int i = eventBatchIndex + 1; i < eventBatches.Count; ++i)
+				{
+					if (IsSameTypeAtSamePos(eventBatches[eventBatchIndex], eventBatches[i]))
+					{
+						edgeEventsAtSamePos.Add(eventBatches[i]);
+						eventBatches.RemoveAt(i);
+						--i;
+					}
 				}
+				ProcessBatchEvents(edgeEventsAtSamePos);
+				++eventBatchIndex;
 			}
 
 			// if we emptied the entire set of events that happened at the same time, we update the wavefront
@@ -378,7 +391,7 @@ namespace Briganti.StraightSkeletonGeneration
 				}
 				else
 				{
-					
+
 					// it can also happen that the vertex that is causing the split, has been deleted by an edge event before - we ignore this split as well!
 					ref var edgeEvent = ref wavefront.edgeEvents[edgeIndex];
 					int vertexIndex = edgeEvent.reflexVertexIndex;
