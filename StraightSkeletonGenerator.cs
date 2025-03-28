@@ -54,7 +54,7 @@ namespace Briganti.StraightSkeletonGeneration
 				return edgeIndex;
 			}
 
-			public static readonly QueueEvent Invalid = new() { eventType = EventType.None };
+			public static QueueEvent Invalid = new QueueEvent() { eventType = EventType.None };
 		}
 
 		private WavefrontGraph wavefront;
