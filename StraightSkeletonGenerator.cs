@@ -55,6 +55,13 @@ namespace Briganti.StraightSkeletonGeneration
 			}
 
 			public static readonly QueueEvent Invalid = new() { eventType = EventType.None };
+
+			public override string ToString()
+			{
+				if (eventType == EventType.None) return "No event";
+				else if (eventType == EventType.VertexSplit) return $"{eventType} event at time {eventTime}, pos {eventPos}, vertex index {vertexIndex}";
+				else return $"{eventType} event at time {eventTime}, pos {eventPos}, edge index {edgeIndex}";
+			}
 		}
 
 		private WavefrontGraph wavefront;
@@ -73,6 +80,7 @@ namespace Briganti.StraightSkeletonGeneration
 		private List<QueueEvent> queueEventsAtTheSamePos = new List<QueueEvent>();
 
 		private bool debug;
+		private bool verbose = false;
 
 
 		public StraightSkeletonGenerator(PolygonWithHoles polygonWithHoles, float maxEventTime, bool performDebugChecks)
@@ -120,7 +128,11 @@ namespace Briganti.StraightSkeletonGeneration
 
 			// initialize the events now - we are ready to receive them
 			wavefront.GenerateInitialEvents();
+		}
 
+		public void SetVerbose(bool verbose)
+		{
+			this.verbose = verbose;
 		}
 
 		public void Step()
@@ -206,16 +218,6 @@ namespace Briganti.StraightSkeletonGeneration
 				vertexData.queueId = -1;
 				return new QueueEvent(index, vertexData);
 			}
-		}
-
-		private int CompareEdgeEvent(int edgeIndex1, int edgeIndex2)
-		{
-			ref var edgeEvent1 = ref wavefront.edgeEvents[edgeIndex1];
-			ref var edgeEvent2 = ref wavefront.edgeEvents[edgeIndex2];
-
-			int cmp = edgeEvent1.eventType.CompareTo(edgeEvent2.eventType);
-			if (cmp == 0) cmp = Geometry.CompareTo(edgeEvent1.eventPos, edgeEvent2.eventPos);
-			return cmp;
 		}
 
 		private void ProcessEventBatch()
