@@ -1,6 +1,7 @@
 ﻿using Briganti.StraightSkeletons.Priority_Queue;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using Unity.Mathematics;
 using UnityEngine;
@@ -179,6 +180,7 @@ namespace Briganti.StraightSkeletonGeneration
 			eventBatchIndex = 0;
 
 			QueueEvent queueEvent = DequeueNextEvent();
+			QueueEvent firstQueueEvent = queueEvent;
 			while (queueEvent.eventType == EventType.None && eventQueue.Count > 0) queueEvent = DequeueNextEvent();
 
 			// if this is the first event that is over time, we just go over all remaining edges in the queue and spawn them at their position at maxEventTime
@@ -191,7 +193,7 @@ namespace Briganti.StraightSkeletonGeneration
 			eventBatches.Add(queueEvent);
 
 			// find all events at the same time
-			while (eventQueue.Count > 0 && IsAtSameTime(queueEvent, eventQueue.First))
+			while (eventQueue.Count > 0 && IsAtSameTime(firstQueueEvent, eventQueue.First))
 			{
 				queueEvent = DequeueNextEvent();
 				if (queueEvent.eventType == EventType.None) continue; // skip this event
@@ -303,6 +305,24 @@ namespace Briganti.StraightSkeletonGeneration
 			if (eventBatchIndex != -1 && eventBatchIndex >= this.eventBatchIndex && eventTime >= time + Geometry.EPS_LOWPRECISION)
 			{
 				eventBatches.RemoveAt(eventBatchIndex);
+			}
+
+			// if a new or updated event should be in the batch right now but isn't, we totally invalidate the entire batch - we need to start all over again!
+			if (eventBatches.Count > 0 && eventBatchIndex == -1 && IsAtSameTime(eventBatches[0], eventIndex))
+			{
+				Debug.Log("Clear " + string.Join(", ", eventBatches.Skip(this.eventBatchIndex)) + " because the new event " + eventIndex + " at " + eventTime + " should be part of this batch");
+				for (int i = this.eventBatchIndex; i < eventBatches.Count; ++i)
+				{
+					QueueEvent queueEvent = eventBatches[i];
+					if (queueEvent.eventType != EventType.None && queueEvent.eventType != EventType.NotInWavefront)
+					{
+						eventQueue.Enqueue(eventBatches[i].index, eventBatches[i].eventTime, out int oldEventNewQueueId);
+						if (queueEvent.eventType == EventType.VertexSplit) wavefront.vertexDatas[queueEvent.vertexIndex].queueId = oldEventNewQueueId;
+						else wavefront.edgeEvents[queueEvent.edgeIndex].queueId = oldEventNewQueueId;
+					}
+				}
+				eventBatches.Clear();
+				this.eventBatchIndex = 0;
 			}
 
 			// could be removed and in the batch to be processed at this point
