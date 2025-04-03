@@ -9,7 +9,6 @@ namespace Briganti.StraightSkeletonGeneration
 	public class StraightSkeleton : VertexGraph
 	{
 		public float[] vertexTimes { get; private set; }
-		public int[] wavefrontToStraightSkeletonVertexIndices { get; private set; }
 
 		public float maxTime { get; private set; } = float.MinValue;
 
