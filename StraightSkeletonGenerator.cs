@@ -281,49 +281,71 @@ namespace Briganti.StraightSkeletonGeneration
 
 		public void AddOrUpdateEdgeEvent(int edgeIndex)
 		{
-
-			ref EdgeEvent edgeEvent = ref wavefront.edgeEvents[edgeIndex];
-			AddOrUpdateEvent(QueueEvent.EdgeIndexToQueueIndex(edgeIndex), edgeEvent.eventTime, edgeEvent.queueId, edgeEvent.eventType.IsValid(), out int newQueueId);
-			edgeEvent.queueId = newQueueId;
+			AddOrUpdateEdgeEvent(edgeIndex, true);
 		}
 
 		public void AddOrUpdateVertexEvent(int vertexIndex)
 		{
+			AddOrUpdateVertexEvent(vertexIndex, true);
+		}
+
+		public void AddOrUpdateEdgeEvent(int edgeIndex, bool validateEventBatches = true)
+		{
+
+			ref EdgeEvent edgeEvent = ref wavefront.edgeEvents[edgeIndex];
+			AddOrUpdateEvent(QueueEvent.EdgeIndexToQueueIndex(edgeIndex), edgeEvent.eventTime, edgeEvent.queueId, edgeEvent.eventType.IsValid(), validateEventBatches, out int newQueueId);
+			edgeEvent.queueId = newQueueId;
+		}
+
+		public void AddOrUpdateVertexEvent(int vertexIndex, bool validateEventBatches = true)
+		{
 
 			ref VertexData vertexData = ref wavefront.vertexDatas[vertexIndex];
 			bool valid = (vertexData.inWavefront && vertexData.partOfSplitEvent);
-			AddOrUpdateEvent(QueueEvent.VertexIndexToQueueIndex(vertexIndex), vertexData.splitTime, vertexData.queueId, valid, out int newQueueId);
+			AddOrUpdateEvent(QueueEvent.VertexIndexToQueueIndex(vertexIndex), vertexData.splitTime, vertexData.queueId, valid, validateEventBatches, out int newQueueId);
 			vertexData.queueId = newQueueId;
 		}
 
-		private void AddOrUpdateEvent(int eventIndex, float eventTime, int queueId, bool validEvent, out int newQueueId)
+		private void AddOrUpdateEvent(int eventIndex, float eventTime, int queueId, bool validEvent, bool validateEventBatches, out int newQueueId)
 		{
-			Profiler.BeginSample("EventQueue.AddOrUpdateEdgeEvent");
+			Profiler.BeginSample("EventQueue.AddOrUpdateEvent.ValidateEventBatches");
+
 			// if we are in the current event batch and we moved back in time from the current time, we remove ourselves from the batch
 			// this means that a previous event in the batch has changed our event time, and we are not ready to be handled just yet.
-			int eventBatchIndex = eventBatches.FindIndex(queueEvent => queueEvent.index == eventIndex);
-			if (eventBatchIndex != -1 && eventBatchIndex >= this.eventBatchIndex && eventTime >= time + Geometry.EPS_LOWPRECISION)
+			// this can ONLY happen if we are not in a queue, because everything in eventBatches was removed from the queue.
+			if (queueId == -1)
 			{
-				eventBatches.RemoveAt(eventBatchIndex);
+				int eventBatchIndex = eventBatches.FindIndex(queueEvent => queueEvent.index == eventIndex);
+				if (eventBatchIndex != -1 && eventBatchIndex >= this.eventBatchIndex && eventTime >= time + Geometry.EPS_LOWPRECISION)
+				{
+					eventBatches.RemoveAt(eventBatchIndex);
+				}
+
+				// if a new or updated event should be in the batch right now but isn't, we totally invalidate the entire batch - we need to start all over again!
+				if (eventBatches.Count > 0 && eventBatchIndex == -1 && IsAtSameTime(eventBatches[0], eventIndex))
+				{
+					Debug.Log("Clear " + string.Join(", ", eventBatches.Skip(this.eventBatchIndex)) + " because the new event " + eventIndex + " at " + eventTime + " should be part of this batch");
+					for (int i = this.eventBatchIndex; i < eventBatches.Count; ++i)
+					{
+						QueueEvent queueEvent = eventBatches[i];
+
+						// this is the actual same event that we're adding right now - don't add it yet, as it will be added later
+						if (queueEvent.index == eventIndex) continue;
+
+						if (queueEvent.eventType != EventType.None && queueEvent.eventType != EventType.NotInWavefront)
+						{
+							if (queueEvent.eventType == EventType.VertexSplit) AddOrUpdateVertexEvent(queueEvent.vertexIndex, false);
+							else AddOrUpdateEdgeEvent(queueEvent.edgeIndex, false);
+						}
+					}
+					eventBatches.Clear();
+					this.eventBatchIndex = 0;
+				}
 			}
 
-			// if a new or updated event should be in the batch right now but isn't, we totally invalidate the entire batch - we need to start all over again!
-			if (eventBatches.Count > 0 && eventBatchIndex == -1 && IsAtSameTime(eventBatches[0], eventIndex))
-			{
-				Debug.Log("Clear " + string.Join(", ", eventBatches.Skip(this.eventBatchIndex)) + " because the new event " + eventIndex + " at " + eventTime + " should be part of this batch");
-				for (int i = this.eventBatchIndex; i < eventBatches.Count; ++i)
-				{
-					QueueEvent queueEvent = eventBatches[i];
-					if (queueEvent.eventType != EventType.None && queueEvent.eventType != EventType.NotInWavefront)
-					{
-						eventQueue.Enqueue(eventBatches[i].index, eventBatches[i].eventTime, out int oldEventNewQueueId);
-						if (queueEvent.eventType == EventType.VertexSplit) wavefront.vertexDatas[queueEvent.vertexIndex].queueId = oldEventNewQueueId;
-						else wavefront.edgeEvents[queueEvent.edgeIndex].queueId = oldEventNewQueueId;
-					}
-				}
-				eventBatches.Clear();
-				this.eventBatchIndex = 0;
-			}
+			Profiler.EndSample();
+
+			Profiler.BeginSample("EventQueue.AddOrUpdateEdgeEvent");
 
 			// could be removed and in the batch to be processed at this point
 			if (eventQueue.Contains(queueId))
