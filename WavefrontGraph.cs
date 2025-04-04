@@ -319,7 +319,7 @@ namespace Briganti.StraightSkeletonGeneration
 			ref VertexData vertexData = ref vertexDatas[vertexIndex];
 			vertexData.inWavefront = false;
 			vertexData.partOfSplitEvent = false;
-			eventTimeListener.AddOrUpdateEdgeEvent(vertexIndex);
+			eventTimeListener.AddOrUpdateVertexEvent(vertexIndex);
 		}
 
 		private void RemoveEdgeFromWavefront(int edgeIndex)
