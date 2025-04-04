@@ -625,9 +625,28 @@ namespace Briganti.StraightSkeletonGeneration
 			ref VertexData prevData = ref vertexDatas[edge.prevVertexIndex];
 			ref VertexData nextData = ref vertexDatas[edge.nextVertexIndex];
 
+			[MethodImpl(MethodImplOptions.AggressiveInlining)]
+			bool IsCloseEnoughToPositive(float t0, float2 velocity0, float t1, float2 velocity1)
+			{
+				// if this SHOULD be false, we calculate how far we actually travelled, and if it's not that far (because velocity is very small), we let it slip
+				if (t0 <= -Geometry.EPS) {
+					float2 offset0 = velocity0 * t0;
+					float d0 = math.lengthsq(offset0);
+					if (d0 > Geometry.EPSSQ_LOWPRECISION) return false;
+				}
+				if (t1 <= -Geometry.EPS) {
+					float2 offset1 = velocity1 * t1;
+					float d1 = math.lengthsq(offset1);
+					if (d1 > Geometry.EPSSQ_LOWPRECISION) return false;
+				}
+
+				return true;
+			}
+
 			if (Geometry.GetLineIntersection(prevVertex, prevVertex + prevData.velocity, nextVertex, nextVertex + nextData.velocity, out float t0, out float t1))
 			{
-				if (t0 > -Geometry.EPS && t1 > -Geometry.EPS)
+				if (IsCloseEnoughToPositive(t0, prevData.velocity, t1, nextData.velocity))
+				//if (t0 > -Geometry.EPS && t1 > -Geometry.EPS)
 				{
 					eventData.eventType = EventType.Edge;
 					eventData.eventPos = prevVertex + prevData.velocity * t0;

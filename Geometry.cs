@@ -11,6 +11,7 @@ namespace Briganti.StraightSkeletonGeneration
 		public const float EPS_LOWPRECISION = 0.01f;//0.01f;
 		public const float EPS = 0.0001f;
 		public const float EPSSQ = EPS * EPS;
+		public const float EPSSQ_LOWPRECISION = EPS_LOWPRECISION * EPS_LOWPRECISION;
 
 		public static bool GetLineIntersection(float2 p0, float2 p1, float2 q0, float2 q1, out float t0, out float t1)
 		{
