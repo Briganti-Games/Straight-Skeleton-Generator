@@ -326,7 +326,7 @@ namespace Briganti.StraightSkeletonGeneration
 				// if a new or updated event should be in the batch right now but isn't, we totally invalidate the entire batch - we need to start all over again!
 				if (eventBatches.Count > 0 && eventBatchIndex == -1 && IsAtSameTime(eventBatches[0], eventIndex))
 				{
-					Debug.Log("Clear " + string.Join(", ", eventBatches.Skip(this.eventBatchIndex)) + " because the new event " + eventIndex + " at " + eventTime + " should be part of this batch");
+					//Debug.Log("Clear " + string.Join(", ", eventBatches.Skip(this.eventBatchIndex)) + " because the new event " + eventIndex + " at " + eventTime + " should be part of this batch");
 					for (int i = this.eventBatchIndex; i < eventBatches.Count; ++i)
 					{
 						QueueEvent queueEvent = eventBatches[i];
