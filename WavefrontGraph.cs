@@ -112,6 +112,10 @@ namespace Briganti.StraightSkeletonGeneration
 				edgeEvents[edgeIndex].eventType = EventType.None;
 				edgeEvents[edgeIndex].queueId = -1;
 
+				// store the direction the edge is moving by finding the two points it connects
+				float2 next = contour[(i + 1) % contour.Length];
+				edgeEvents[edgeIndex].dir = math.normalize(Geometry.RotateMinus90Degrees(next - curr));
+
 				affectedVertices.Add(newVertexIndex);
 				affectedEdges.Add(edgeIndex);
 			}
@@ -226,6 +230,8 @@ namespace Briganti.StraightSkeletonGeneration
 			// make sure the new edges are part of the wavefront now
 			edgeEvents[newPrevEdgeIndex].eventType = EventType.None;
 			edgeEvents[newNextEdgeIndex].eventType = EventType.None;
+			edgeEvents[newPrevEdgeIndex].dir = edgeEvents[splitEdgeIndex].dir;
+			edgeEvents[newNextEdgeIndex].dir = edgeEvents[splitEdgeIndex].dir;
 
 			// connect the edges
 			UpdateConnections(newVertexIndex, oldEdge.prevVertexIndex, oldEdge.nextVertexIndex, newPrevEdgeIndex, newNextEdgeIndex);
@@ -466,7 +472,6 @@ namespace Briganti.StraightSkeletonGeneration
 		{
 			Profiler.BeginSample("UpdateVertexData");
 
-			float2 vertex = GetVertexPosAtTime(vertexIndex, time);
 			ref VertexData vertexData = ref vertexDatas[vertexIndex];
 
 			// we reset our split event state - and also the edge that was associated with our split
@@ -486,21 +491,23 @@ namespace Briganti.StraightSkeletonGeneration
 			// we never re-calculate a vertex velocity (is this right?)
 			if (vertexData.type == WavefrontVertexType.Unknown)
 			{
+				float2 prevToCurrLineDir = edgeEvents[vertexData.prevEdgeIndex].dir;
+				float2 currToNextLineDir = edgeEvents[vertexData.nextEdgeIndex].dir;
 
-				float2 prevVertex = GetVertexPosAtTime(vertexData.prevVertexIndex, time);
-				float2 nextVertex = GetVertexPosAtTime(vertexData.nextVertexIndex, time);
-
-				float2 velocity = CalculateVelocity(prevVertex, vertex, nextVertex);
+				float2 velocity = CalculateVelocity(prevToCurrLineDir, currToNextLineDir);
 				WavefrontVertexType type = WavefrontVertexType.Convex;
 				if (math.length(velocity) > Geometry.EPS)
 				{
-					bool isReflex = Geometry.IsRelfexVertex(prevVertex, vertex, nextVertex);
+					float angleFromPrevToNextLine = Geometry.SignedAngle(prevToCurrLineDir, currToNextLineDir);
+					bool isReflex = angleFromPrevToNextLine >= -Geometry.EPS;
+
 					type = (isReflex ? WavefrontVertexType.Reflex : WavefrontVertexType.Convex);
 
-					// the vertex lies on a parallel line - we can't calculate a real velocity
-					if (Geometry.IsParallelLines(prevVertex, vertex, prevVertex, nextVertex))
+					if (angleFromPrevToNextLine < -Geometry.EPS)
 					{
 						// not sure yet if there's an actual use case where a vertex in this situation is actually a real reflex vertex
+						float2 prevVertex = GetVertexPosAtTime(vertexData.prevVertexIndex, time);
+						float2 nextVertex = GetVertexPosAtTime(vertexData.nextVertexIndex, time);
 						if (math.distancesq(prevVertex, nextVertex) < Geometry.EPSSQ)
 						{
 							velocity = float2.zero;
@@ -516,24 +523,17 @@ namespace Briganti.StraightSkeletonGeneration
 			Profiler.EndSample();
 		}
 
-		public static float2 CalculateVelocity(in float2 prev, in float2 curr, in float2 next)
+		public static float2 CalculateVelocity(in float2 prevToCurrLineDir, in float2 currToNextLineDir)
 		{
-			float2 prevToCurr = curr - prev;
-			float2 nextToCurr = next - curr;
-
-			// rotate them 90°
-			float2 moveDir1 = math.normalize(Geometry.RotateMinus90Degrees(prevToCurr));
-			float2 moveDir2 = math.normalize(Geometry.RotateMinus90Degrees(nextToCurr));
-
 			// if the adjacent move dirs cancel each other out, we don't move
-			float2 sum = moveDir1 + moveDir2;
+			float2 sum = prevToCurrLineDir + currToNextLineDir;
 			if (math.lengthsq(sum) < Geometry.EPSSQ)
 			{
 				return float2.zero;
 			}
 
-			float2 dir = math.normalize(moveDir1 + moveDir2);
-			float speed = 2.0f / (math.dot(moveDir1, dir) + math.dot(moveDir2, dir));
+			float2 dir = math.normalize(prevToCurrLineDir + currToNextLineDir);
+			float speed = 2.0f / (math.dot(prevToCurrLineDir, dir) + math.dot(currToNextLineDir, dir));
 
 			float2 velocity = dir * speed;
 			//Debug.Log("Vertex #" + vertexIndex + " has dir " + dir + " and speed " + speed + " based on " + moveDir1 + " and " + moveDir2 + " and final dir has angle " + (Geometry.GetAngle(dir) * Mathf.Rad2Deg) + ", angle between two adjacent dirs is " + (Geometry.SignedAngle(prevToCurr, nextToCurr) * Mathf.Rad2Deg));

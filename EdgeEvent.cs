@@ -9,6 +9,7 @@ namespace Briganti.StraightSkeletonGeneration
 		public EventType eventType;
 		public float eventTime;
 		public float2 eventPos;
+		public float2 dir;
 
 
 		public void Reset()
