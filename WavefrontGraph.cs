@@ -114,7 +114,7 @@ namespace Briganti.StraightSkeletonGeneration
 
 				// store the direction the edge is moving by finding the two points it connects
 				float2 next = contour[(i + 1) % contour.Length];
-				edgeEvents[edgeIndex].dir = math.normalize(Geometry.RotateMinus90Degrees(next - curr));
+				edgeEvents[edgeIndex].dir = math.normalize(Geometry2D.RotateMinus90Degrees(next - curr));
 
 				affectedVertices.Add(newVertexIndex);
 				affectedEdges.Add(edgeIndex);
@@ -221,7 +221,7 @@ namespace Briganti.StraightSkeletonGeneration
 			// we need to assign a temporary velocity so we can sort this point later
 			float2 prevVertex = GetVertexPosAtTime(oldEdge.prevVertexIndex, time);
 			float2 nextVertex = GetVertexPosAtTime(oldEdge.nextVertexIndex, time);
-			vertexDatas[newVertexIndex].velocity = math.normalize(Geometry.Rotate90DegreesClockwise(nextVertex - prevVertex));
+			vertexDatas[newVertexIndex].velocity = math.normalize(Geometry2D.Rotate90DegreesClockwise(nextVertex - prevVertex));
 
 			// we create two new edges from the old edge
 			int newPrevEdgeIndex = AddEdge(oldEdge.prevVertexIndex, newVertexIndex);
@@ -248,7 +248,7 @@ namespace Briganti.StraightSkeletonGeneration
 			int CompareReflexVertexVelocities(int vertexIndex1, int vertexIndex2)
 			{
 				// we sort clockwise, hence the minus before the formula
-				return -Geometry.GetAngle(vertexDatas[vertexIndex1].velocity).CompareTo(Geometry.GetAngle(vertexDatas[vertexIndex2].velocity));
+				return -Geometry2D.GetAngle(vertexDatas[vertexIndex1].velocity).CompareTo(Geometry2D.GetAngle(vertexDatas[vertexIndex2].velocity));
 			}
 
 			// sort the vertices by their velocity so that they're connected in the right order
@@ -275,7 +275,7 @@ namespace Briganti.StraightSkeletonGeneration
 				// draw an edge from that vertex to the new one at the exact same pos.
 				float2 prevPos = vertices[currVertexIndex];
 				float2 newPos = vertices[newVertexIndex];
-				if (math.distancesq(prevPos, newPos) > Geometry.EPSSQ)
+				if (math.distancesq(prevPos, newPos) > Geometry2D.EPSSQ)
 				{
 					newEdges.Add(new Edge(currVertexIndex, newVertexIndex));
 				}
@@ -496,19 +496,19 @@ namespace Briganti.StraightSkeletonGeneration
 
 				float2 velocity = CalculateVelocity(prevToCurrLineDir, currToNextLineDir);
 				WavefrontVertexType type = WavefrontVertexType.Convex;
-				if (math.length(velocity) > Geometry.EPS)
+				if (math.length(velocity) > Geometry2D.EPS)
 				{
-					float angleFromPrevToNextLine = Geometry.SignedAngle(prevToCurrLineDir, currToNextLineDir);
-					bool isReflex = angleFromPrevToNextLine >= -Geometry.EPS;
+					float angleFromPrevToNextLine = Geometry2D.SignedAngle(prevToCurrLineDir, currToNextLineDir);
+					bool isReflex = angleFromPrevToNextLine >= -Geometry2D.EPS;
 
 					type = (isReflex ? WavefrontVertexType.Reflex : WavefrontVertexType.Convex);
 
-					if (angleFromPrevToNextLine < -Geometry.EPS)
+					if (angleFromPrevToNextLine < -Geometry2D.EPS)
 					{
 						// not sure yet if there's an actual use case where a vertex in this situation is actually a real reflex vertex
 						float2 prevVertex = GetVertexPosAtTime(vertexData.prevVertexIndex, time);
 						float2 nextVertex = GetVertexPosAtTime(vertexData.nextVertexIndex, time);
-						if (math.distancesq(prevVertex, nextVertex) < Geometry.EPSSQ)
+						if (math.distancesq(prevVertex, nextVertex) < Geometry2D.EPSSQ)
 						{
 							velocity = float2.zero;
 							type = WavefrontVertexType.Convex;
@@ -527,7 +527,7 @@ namespace Briganti.StraightSkeletonGeneration
 		{
 			// if the adjacent move dirs cancel each other out, we don't move
 			float2 sum = prevToCurrLineDir + currToNextLineDir;
-			if (math.lengthsq(sum) < Geometry.EPSSQ)
+			if (math.lengthsq(sum) < Geometry2D.EPSSQ)
 			{
 				return float2.zero;
 			}
@@ -629,17 +629,17 @@ namespace Briganti.StraightSkeletonGeneration
 			bool IsCloseEnoughToPositive(float t0, float2 velocity0, float t1, float2 velocity1)
 			{
 				// if this SHOULD be false, we calculate how far we actually travelled, and if it's not that far (because velocity is very small), we let it slip
-				if (t0 <= -Geometry.EPS)
+				if (t0 <= -Geometry2D.EPS)
 				{
 					float2 offset0 = velocity0 * t0;
 					float d0 = math.lengthsq(offset0);
-					if (d0 > Geometry.EPSSQ_LOWPRECISION) return false;
+					if (d0 > Geometry2D.EPSSQ_LOWPRECISION) return false;
 				}
-				if (t1 <= -Geometry.EPS)
+				if (t1 <= -Geometry2D.EPS)
 				{
 					float2 offset1 = velocity1 * t1;
 					float d1 = math.lengthsq(offset1);
-					if (d1 > Geometry.EPSSQ_LOWPRECISION) return false;
+					if (d1 > Geometry2D.EPSSQ_LOWPRECISION) return false;
 				}
 
 				return true;
@@ -669,7 +669,7 @@ namespace Briganti.StraightSkeletonGeneration
 				return false;
 			}*/
 
-			if (Geometry.GetLineIntersection(prevVertex, prevVertex + prevData.velocity, nextVertex, nextVertex + nextData.velocity, out float t0, out float t1))
+			if (Geometry2D.GetLineIntersection(prevVertex, prevVertex + prevData.velocity, nextVertex, nextVertex + nextData.velocity, out float t0, out float t1))
 			{
 				if (IsCloseEnoughToPositive(t0, prevData.velocity, t1, nextData.velocity))
 				//if (t0 > -Geometry.EPS && t1 > -Geometry.EPS)
@@ -684,7 +684,7 @@ namespace Briganti.StraightSkeletonGeneration
 					float2 prevVertexCurrentPos = GetVertexPosAtTime(prevVertex, prevData, creationTime);
 					float2 nextVertexCurrentPos = GetVertexPosAtTime(nextVertex, nextData, creationTime);
 
-					float2 projPoint = Geometry.ProjectPointOnLine(prevVertexCurrentPos, nextVertexCurrentPos, eventData.eventPos, out float t);
+					float2 projPoint = Geometry2D.ProjectPointOnLine(prevVertexCurrentPos, nextVertexCurrentPos, eventData.eventPos, out float t);
 
 					// the event time is the time it takes for the wavefront to reach this position, AFTER both vertices of the edge were spawned
 					eventData.eventTime = creationTime + math.distance(projPoint, eventData.eventPos);
@@ -706,7 +706,7 @@ namespace Briganti.StraightSkeletonGeneration
 		private float2 GetVertexPosAtTime(in float2 vertex, in VertexData vertexData, float time)
 		{
 			//if (time < vertexData.creationTime - Geometry.EPS) throw new ArgumentException($"Time {time} lies in the past of the creation point of vertex {vertex} ({vertexData.creationTime}), this should not be possible.");
-			if (time < vertexData.creationTime - Geometry.EPS) time = vertexData.creationTime;
+			if (time < vertexData.creationTime - Geometry2D.EPS) time = vertexData.creationTime;
 			time -= vertexData.creationTime;
 			return vertex + vertexData.velocity * time;
 		}
@@ -747,12 +747,12 @@ namespace Briganti.StraightSkeletonGeneration
 			if (IsDestroyedByEdgeEventBefore(vertexData, eventTime)) return false;
 
 			// if the reflex vertex lies ON the prev or next vertex, we have an immediate-time vertex split
-			if (math.distancesq(prevVertex, reflexVertex) < Geometry.EPSSQ || math.distancesq(nextVertex, reflexVertex) < Geometry.EPSSQ)
+			if (math.distancesq(prevVertex, reflexVertex) < Geometry2D.EPSSQ || math.distancesq(nextVertex, reflexVertex) < Geometry2D.EPSSQ)
 			{
 				// if the vertex SPAWNED on the line and immediately triggers a collision,
 				// it means we previously already processed this collision. We ignore it!
 				float2 originalVertexPosition = vertices[reflexVertexIndex];
-				if (math.distancesq(prevVertex, originalVertexPosition) < Geometry.EPSSQ || math.distancesq(nextVertex, originalVertexPosition) < Geometry.EPSSQ)
+				if (math.distancesq(prevVertex, originalVertexPosition) < Geometry2D.EPSSQ || math.distancesq(nextVertex, originalVertexPosition) < Geometry2D.EPSSQ)
 				{
 					return false;
 				}
@@ -764,18 +764,18 @@ namespace Briganti.StraightSkeletonGeneration
 				}*/
 
 				// this is the best split (earliest and preferably edge before prev/next) for this vertex, so we assign it!
-				var prevNextSplitPoint = (math.distancesq(prevVertex, reflexVertex) < Geometry.EPSSQ ? SplitPoint.PrevVertex : SplitPoint.NextVertex);
+				var prevNextSplitPoint = (math.distancesq(prevVertex, reflexVertex) < Geometry2D.EPSSQ ? SplitPoint.PrevVertex : SplitPoint.NextVertex);
 				AssignSplitToReflexVertex(edgeIndex, ref vertexData, currentTime, eventPos, prevNextSplitPoint);
 				return true;
 			}
 
 			// we had a split for this reflex vertex earlier - this one is irrelevant
-			if (vertexData.partOfSplitEvent && eventTime >= vertexData.splitTime + Geometry.EPS) return false;
+			if (vertexData.partOfSplitEvent && eventTime >= vertexData.splitTime + Geometry2D.EPS) return false;
 
 			// this edge already has an event earlier
 			// if there is one at the same time, we want to overwrite it with a split event if it exists
 			ref EdgeEvent edgeEvent = ref edgeEvents[edgeIndex];
-			if (edgeEvent.eventTime < eventTime - Geometry.EPS) return false;
+			if (edgeEvent.eventTime < eventTime - Geometry2D.EPS) return false;
 
 			// edge already has a split - only one split per edge
 			//if (edgeEvent.reflexVertexIndex != -1) return;
@@ -783,19 +783,19 @@ namespace Briganti.StraightSkeletonGeneration
 			// now finally, we need to make sure that this still falls into the edge once it moved that far
 			float2 prevVertexAtEventTime = GetVertexPosAtTime(edge.prevVertexIndex, eventTime);
 			float2 nextVertexAtEventTime = GetVertexPosAtTime(edge.nextVertexIndex, eventTime);
-			Geometry.ProjectPointOnLine(prevVertexAtEventTime, nextVertexAtEventTime, eventPos, out float tLine);
-			if (tLine < -Geometry.EPS || tLine > 1 + Geometry.EPS || tLine == float.NaN) return false;
+			Geometry2D.ProjectPointOnLine(prevVertexAtEventTime, nextVertexAtEventTime, eventPos, out float tLine);
+			if (tLine < -Geometry2D.EPS || tLine > 1 + Geometry2D.EPS || tLine == float.NaN) return false;
 
 			// if we split at exactly the corner, we have a special type of split event - this event will NOT generate new edges,
 			// but will still split the entire graph into two pieces and spawn new vertices at the split point.
 			int splitPointVertexIndex = -1;
 			SplitPoint splitPoint = SplitPoint.Edge;
-			if (tLine < Geometry.EPS)
+			if (tLine < Geometry2D.EPS)
 			{
 				splitPointVertexIndex = edge.prevVertexIndex;
 				splitPoint = SplitPoint.PrevVertex;
 			}
-			else if (tLine > 1.0f - Geometry.EPS)
+			else if (tLine > 1.0f - Geometry2D.EPS)
 			{
 				splitPointVertexIndex = edge.nextVertexIndex;
 				splitPoint = SplitPoint.NextVertex;
@@ -820,10 +820,10 @@ namespace Briganti.StraightSkeletonGeneration
 		private bool IsDestroyedByEdgeEventBefore(in VertexData vertexData, float eventTime)
 		{
 			ref EdgeEvent prevEdge = ref edgeEvents[vertexData.prevEdgeIndex];
-			if (prevEdge.eventType == EventType.Edge && prevEdge.eventTime < eventTime + Geometry.EPS_LOWPRECISION) return true;
+			if (prevEdge.eventType == EventType.Edge && prevEdge.eventTime < eventTime + Geometry2D.EPS_LOWPRECISION) return true;
 
 			ref EdgeEvent nextEdge = ref edgeEvents[vertexData.nextEdgeIndex];
-			if (nextEdge.eventType == EventType.Edge && nextEdge.eventTime < eventTime + Geometry.EPS_LOWPRECISION) return true;
+			if (nextEdge.eventType == EventType.Edge && nextEdge.eventTime < eventTime + Geometry2D.EPS_LOWPRECISION) return true;
 
 			return false;
 		}
@@ -835,7 +835,7 @@ namespace Briganti.StraightSkeletonGeneration
 			if (!currentSplit.partOfSplitEvent) return true;
 
 			// if we are earlier than the previous split, we definitely are better
-			if (newSplitEventTime < currentSplit.splitTime - Geometry.EPS) return true;
+			if (newSplitEventTime < currentSplit.splitTime - Geometry2D.EPS) return true;
 
 			// if the current split is NOT an edge split and the new one is, the new one is better
 			if (currentSplit.splitPoint != SplitPoint.Edge && newSplitPoint == SplitPoint.Edge) return true;
@@ -856,29 +856,29 @@ namespace Briganti.StraightSkeletonGeneration
 		{
 			y = 0.0f;
 
-			float2 normal = Geometry.Rotate90DegreesClockwise(p2 - p1);
+			float2 normal = Geometry2D.Rotate90DegreesClockwise(p2 - p1);
 
 			// first, we offset everthing so that p1 is the origin, ensuring that the line goes through the origin
 			p -= p1;
 
 			// now we need to rotate everything so that the normal is pointing up
-			float angle = Geometry.SignedAngle(normal, new float2(0, 1));
+			float angle = Geometry2D.SignedAngle(normal, new float2(0, 1));
 
 			// rotate the reflex velocity
-			v = Geometry.Rotate(v, angle);
-			p = Geometry.Rotate(p, angle);
+			v = Geometry2D.Rotate(v, angle);
+			p = Geometry2D.Rotate(p, angle);
 
 			// if we are at the line, we meet immediately, no matter our speed
-			if (math.abs(p.y) < Geometry.EPS) return true;
+			if (math.abs(p.y) < Geometry2D.EPS) return true;
 
 			// if we are moving at exactly the speed of the line, but we are not at the line at the start, we also never meet because we'll be moving parallel
-			if (math.abs(v.y - 1) < Geometry.EPS) return false;
+			if (math.abs(v.y - 1) < Geometry2D.EPS) return false;
 
 			// if we are below the line and not moving upwards fast enough, we never meet
-			if (p.y < -Geometry.EPS && v.y <= 1 + Geometry.EPS) return false;
+			if (p.y < -Geometry2D.EPS && v.y <= 1 + Geometry2D.EPS) return false;
 
 			// if we are above the line and not moving SLOW enough, we never meet
-			if (p.y > Geometry.EPS && v.y >= 1 - Geometry.EPS) return false;
+			if (p.y > Geometry2D.EPS && v.y >= 1 - Geometry2D.EPS) return false;
 
 			// now calculate the actual moving point
 			y = p.y / (1 - v.y);
@@ -1042,7 +1042,7 @@ namespace Briganti.StraightSkeletonGeneration
 
 #if UNITY_EDITOR
 					float2 midPoint = (prevVertex + nextVertex) * 0.5f;
-					float2 normalBack = math.normalize(Geometry.Rotate90DegreesCounterClockwise(nextVertex - prevVertex));
+					float2 normalBack = math.normalize(Geometry2D.Rotate90DegreesCounterClockwise(nextVertex - prevVertex));
 					midPoint += normalBack * 0.1f;
 					float midCreationTime = (prevCreationTime + nextCreationTime) * 0.5f;
 					Handles.Label(Gizmos.matrix.MultiplyPoint(new Vector3(midPoint.x, midCreationTime + 0.01f, midPoint.y)), "" + i, edgeGuiStyle);
@@ -1066,7 +1066,7 @@ namespace Briganti.StraightSkeletonGeneration
 
 #if UNITY_EDITOR
 				var idPoint = vertex;
-				if (math.length(vertexData.velocity) > Geometry.EPS) idPoint -= math.normalize(vertexData.velocity) * 0.1f;
+				if (math.length(vertexData.velocity) > Geometry2D.EPS) idPoint -= math.normalize(vertexData.velocity) * 0.1f;
 				Handles.Label(Gizmos.matrix.MultiplyPoint(new Vector3(idPoint.x, creationTime + 0.01f, idPoint.y)), "" + i, vertexGuiStyle);
 #endif
 			}

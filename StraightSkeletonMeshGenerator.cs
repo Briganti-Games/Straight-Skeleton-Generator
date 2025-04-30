@@ -232,10 +232,10 @@ namespace Briganti.StraightSkeletonGeneration
 					float2 candidateDir = math.normalize(straightSkeleton.vertices[candidateEdge.nextVertexIndex] - straightSkeleton.vertices[candidateEdge.prevVertexIndex]);
 
 					// SignedAngle returns counter-clockwise, while we are looking for clockwise angle, hence the minus!
-					float angle = -Geometry.SignedAngle(edgeDir, candidateDir);
+					float angle = -Geometry2D.SignedAngle(edgeDir, candidateDir);
 
 					// we don't want to allow 180° angle switches, but any other edge closest to that is our favourite!
-					if (angle > bestAngle && angle < math.PI - Geometry.EPS)
+					if (angle > bestAngle && angle < math.PI - Geometry2D.EPS)
 					{
 						bestAngle = angle;
 						nextEdgeIndex = nextEdgeCandidateIndex;

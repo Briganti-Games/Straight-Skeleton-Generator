@@ -186,7 +186,7 @@ namespace Briganti.StraightSkeletonGeneration
 			QueueEvent firstQueueEvent = queueEvent;
 
 			// if this is the first event that is over time, we just go over all remaining edges in the queue and spawn them at their position at maxEventTime
-			if (queueEvent.eventTime > maxEventTime + Geometry.EPS)
+			if (queueEvent.eventTime > maxEventTime + Geometry2D.EPS)
 			{
 				SpawnRemainingEdgesAtMaxTime(queueEvent);
 				return;
@@ -265,7 +265,7 @@ namespace Briganti.StraightSkeletonGeneration
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		private bool IsAtSameTime(in QueueEvent queueEvent, int queueIndex)
 		{
-			return math.abs(queueEvent.eventTime - GetEventTime(queueIndex)) < Geometry.EPS_LOWPRECISION;
+			return math.abs(queueEvent.eventTime - GetEventTime(queueIndex)) < Geometry2D.EPS_LOWPRECISION;
 		}
 
 		private float GetEventTime(int queueIndex)
@@ -278,7 +278,7 @@ namespace Briganti.StraightSkeletonGeneration
 		private bool IsSameTypeAtSamePos(QueueEvent queueEvent1, QueueEvent queueEvent2)
 		{
 			if (queueEvent1.eventType != queueEvent2.eventType) return false;
-			return Geometry.CompareToLowPrecision(queueEvent1.eventPos, queueEvent2.eventPos) == 0;
+			return Geometry2D.CompareToLowPrecision(queueEvent1.eventPos, queueEvent2.eventPos) == 0;
 		}
 
 		public void AddOrUpdateEdgeEvent(int edgeIndex)
@@ -318,7 +318,7 @@ namespace Briganti.StraightSkeletonGeneration
 			if (queueId == -1)
 			{
 				int eventBatchIndex = eventBatches.FindIndex(queueEvent => queueEvent.index == eventIndex);
-				if (eventBatchIndex != -1 && eventBatchIndex >= this.eventBatchIndex && eventTime >= time + Geometry.EPS_LOWPRECISION)
+				if (eventBatchIndex != -1 && eventBatchIndex >= this.eventBatchIndex && eventTime >= time + Geometry2D.EPS_LOWPRECISION)
 				{
 					eventBatches.RemoveAt(eventBatchIndex);
 				}
@@ -462,12 +462,12 @@ namespace Briganti.StraightSkeletonGeneration
 				float2 nextSKVertex = straightSkeleton.vertices[nextSKVertexIndex];
 
 				// add the edges to the straight skeleton
-				if (math.distance(prevSKVertex, newVertex) > Geometry.EPS)
+				if (math.distance(prevSKVertex, newVertex) > Geometry2D.EPS)
 				{
 
 					AddStraightSkeletonArc(prevSKVertexIndex, newSKVertexIndex);
 				}
-				if (math.distance(nextSKVertex, newVertex) > Geometry.EPS)
+				if (math.distance(nextSKVertex, newVertex) > Geometry2D.EPS)
 				{
 					AddStraightSkeletonArc(newSKVertexIndex, nextSKVertexIndex);
 				}
@@ -620,7 +620,7 @@ namespace Briganti.StraightSkeletonGeneration
 				float2 nextSKVertex = straightSkeleton.vertices[nextSKVertexIndex];
 
 				// add the edges to the straight skeleton
-				if (math.distance(prevSKVertex, nextSKVertex) > Geometry.EPS)
+				if (math.distance(prevSKVertex, nextSKVertex) > Geometry2D.EPS)
 				{
 					AddStraightSkeletonArc(prevSKVertexIndex, nextSKVertexIndex);
 
@@ -647,7 +647,7 @@ namespace Briganti.StraightSkeletonGeneration
 			float2 nextSKVertex = straightSkeleton.vertices[nextSKVertexIndex];
 
 			// add the edges to the straight skeleton
-			if (math.distance(prevSKVertex, nextSKVertex) > Geometry.EPS)
+			if (math.distance(prevSKVertex, nextSKVertex) > Geometry2D.EPS)
 			{
 				AddStraightSkeletonArc(prevSKVertexIndex, nextSKVertexIndex);
 			}
@@ -699,7 +699,7 @@ namespace Briganti.StraightSkeletonGeneration
 		private void SpawnEdgeFromPosToMaxTimePos(int vertexIndex)
 		{
 			ref VertexData vertexData = ref wavefront.vertexDatas[vertexIndex];
-			if (vertexData.creationTime < maxEventTime - Geometry.EPS)
+			if (vertexData.creationTime < maxEventTime - Geometry2D.EPS)
 			{
 				int startSKVertexIndex = GetStraightSkeletonVertexAtCreationTime(vertexIndex);
 				wavefrontToStraightSkeletonVertexIndices[vertexIndex] = -1;

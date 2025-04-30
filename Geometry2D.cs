@@ -6,7 +6,7 @@ using UnityEngine;
 
 namespace Briganti.StraightSkeletonGeneration
 {
-	public class Geometry
+	public class Geometry2D
 	{
 		public const float EPS_LOWPRECISION = 0.01f;//0.01f;
 		public const float EPS = 0.0001f;
@@ -97,7 +97,7 @@ namespace Briganti.StraightSkeletonGeneration
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static bool IsRelfexVertex(float2 prev, float2 curr, float2 next)
 		{
-			return Det(prev, curr, next) >= -Geometry.EPS;
+			return Det(prev, curr, next) >= -Geometry2D.EPS;
 		}
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -221,7 +221,7 @@ namespace Briganti.StraightSkeletonGeneration
 			float2 a = p1;
 			float2 b = p2;
 			float2 c = p;
-			bool inNormalDir = ((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)) <= Geometry.EPS;
+			bool inNormalDir = ((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)) <= Geometry2D.EPS;
 			return inNormalDir;
 		}
 
@@ -231,7 +231,7 @@ namespace Briganti.StraightSkeletonGeneration
 			float2 a = p1;
 			float2 b = p2;
 			float2 c = p;
-			bool inNormalDir = ((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)) < -Geometry.EPS;
+			bool inNormalDir = ((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)) < -Geometry2D.EPS;
 			return inNormalDir;
 		}
 	}
