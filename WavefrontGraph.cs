@@ -506,13 +506,13 @@ namespace Briganti.StraightSkeletonGeneration
 					if (angleFromPrevToNextLine < -Geometry2D.EPS)
 					{
 						// not sure yet if there's an actual use case where a vertex in this situation is actually a real reflex vertex
-						float2 prevVertex = GetVertexPosAtTime(vertexData.prevVertexIndex, time);
+						/*float2 prevVertex = GetVertexPosAtTime(vertexData.prevVertexIndex, time);
 						float2 nextVertex = GetVertexPosAtTime(vertexData.nextVertexIndex, time);
 						if (math.distancesq(prevVertex, nextVertex) < Geometry2D.EPSSQ)
 						{
 							velocity = float2.zero;
 							type = WavefrontVertexType.Convex;
-						}
+						}*/
 					}
 				}
 
@@ -680,14 +680,20 @@ namespace Briganti.StraightSkeletonGeneration
 					float creationTime = Mathf.Max(prevData.creationTime, nextData.creationTime);
 
 					// we "fast forward" the edge into the current timeframe, so we can see where it is and properly calculate
-					// the REMAINING time it takes to geft to the collapse point.
-					float2 prevVertexCurrentPos = GetVertexPosAtTime(prevVertex, prevData, creationTime);
-					float2 nextVertexCurrentPos = GetVertexPosAtTime(nextVertex, nextData, creationTime);
+					// the REMAINING time it takes to get to the collapse point.
+					//float2 prevVertexCurrentPos = GetVertexPosAtTime(prevVertex, prevData, creationTime);
+					//float2 nextVertexCurrentPos = GetVertexPosAtTime(nextVertex, nextData, creationTime);
 
-					float2 projPoint = Geometry2D.ProjectPointOnLine(prevVertexCurrentPos, nextVertexCurrentPos, eventData.eventPos, out float t);
+					/*float2 projPoint = Geometry2D.ProjectPointOnLine(prevVertexCurrentPos, nextVertexCurrentPos, eventData.eventPos, out float t);
 
 					// the event time is the time it takes for the wavefront to reach this position, AFTER both vertices of the edge were spawned
-					eventData.eventTime = creationTime + math.distance(projPoint, eventData.eventPos);
+					eventData.eventTime = creationTime + math.distance(projPoint, eventData.eventPos);*/
+
+					float time0 = prevData.creationTime + t0;
+					float time1 = nextData.creationTime + t1;
+
+					float eventTime = Mathf.Max(time0, time1);
+					eventData.eventTime = eventTime;
 				}
 			}
 

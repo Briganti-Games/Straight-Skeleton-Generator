@@ -31,7 +31,7 @@ namespace Briganti.StraightSkeletonGeneration
 
 			public QueueEvent(int vertexIndex, in VertexData vertexData)
 			{
-				index = vertexIndex;
+				index = VertexIndexToQueueIndex(vertexIndex);
 				eventType = EventType.VertexSplit;
 				eventTime = vertexData.splitTime;
 				eventPos = vertexData.splitPos;
@@ -55,13 +55,24 @@ namespace Briganti.StraightSkeletonGeneration
 				return edgeIndex;
 			}
 
+			[MethodImpl(MethodImplOptions.AggressiveInlining)]
+			public bool IsEdgeEvent()
+			{
+				return index >= 0;
+			}
+
+			[MethodImpl(MethodImplOptions.AggressiveInlining)]
+			public bool IsVertexEvent()
+			{
+				return !IsEdgeEvent();
+			}
+
 			public static readonly QueueEvent Invalid = new() { eventType = EventType.None };
 
 			public override string ToString()
 			{
-				if (eventType == EventType.None) return "No event";
-				else if (eventType == EventType.VertexSplit) return $"{eventType} event at time {eventTime}, pos {eventPos}, vertex index {vertexIndex}";
-				else return $"{eventType} event at time {eventTime}, pos {eventPos}, edge index {edgeIndex}";
+				if (IsEdgeEvent()) return $"{eventType} event at time {eventTime}, pos {eventPos}, edge index {edgeIndex}";
+				else return $"{eventType} event at time {eventTime}, pos {eventPos}, vertex index {vertexIndex}";
 			}
 		}
 
@@ -81,7 +92,7 @@ namespace Briganti.StraightSkeletonGeneration
 		private List<QueueEvent> queueEventsAtTheSamePos = new List<QueueEvent>();
 
 		private bool debug;
-		private bool verbose = false;
+		private IStraightSkeletonLogger logger = null;
 
 
 		public StraightSkeletonGenerator(PolygonWithHoles polygonWithHoles, float maxEventTime, bool performDebugChecks)
@@ -131,9 +142,9 @@ namespace Briganti.StraightSkeletonGeneration
 			wavefront.GenerateInitialEvents();
 		}
 
-		public void SetVerbose(bool verbose)
+		public void SetLogger(IStraightSkeletonLogger logger)
 		{
-			this.verbose = verbose;
+			this.logger = logger;
 		}
 
 		public void Step()
@@ -193,6 +204,7 @@ namespace Briganti.StraightSkeletonGeneration
 			}
 
 			eventBatches.Add(queueEvent);
+			return;
 
 			// find all events at the same time
 			while (eventQueue.Count > 0 && IsAtSameTime(firstQueueEvent, eventQueue.First))
@@ -200,6 +212,15 @@ namespace Briganti.StraightSkeletonGeneration
 				queueEvent = DequeueNextEvent();
 				if (queueEvent.eventType == EventType.None) continue; // skip this event
 				eventBatches.Add(queueEvent);
+			}
+
+			if (logger != null)
+			{
+				logger.Log($"Generated new event batch with #{eventBatches.Count}:", 0);
+				for (int i = 0; i < eventBatches.Count; ++i)
+				{
+					logger.Log($"#{i + 1}: {eventBatches[i]}", 1);
+				}
 			}
 		}
 
@@ -212,7 +233,7 @@ namespace Briganti.StraightSkeletonGeneration
 				ref EdgeEvent edgeEvent = ref wavefront.edgeEvents[edgeIndex];
 				if (!edgeEvent.eventType.IsValid()) return QueueEvent.Invalid;
 				edgeEvent.queueId = -1;
-				return new QueueEvent(index, edgeEvent);
+				return new QueueEvent(edgeIndex, edgeEvent);
 			}
 			else
 			{
@@ -220,7 +241,7 @@ namespace Briganti.StraightSkeletonGeneration
 				ref VertexData vertexData = ref wavefront.vertexDatas[vertexIndex];
 				if (!vertexData.partOfSplitEvent) return QueueEvent.Invalid;
 				vertexData.queueId = -1;
-				return new QueueEvent(index, vertexData);
+				return new QueueEvent(vertexIndex, vertexData);
 			}
 		}
 
@@ -265,13 +286,19 @@ namespace Briganti.StraightSkeletonGeneration
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		private bool IsAtSameTime(in QueueEvent queueEvent, int queueIndex)
 		{
-			return math.abs(queueEvent.eventTime - GetEventTime(queueIndex)) < Geometry2D.EPS_LOWPRECISION;
+			return IsAtSameTime(queueEvent, GetEventTimeForQueueEvent(queueIndex));
 		}
 
-		private float GetEventTime(int queueIndex)
+		private float GetEventTimeForQueueEvent(int queueIndex)
 		{
 			if (queueIndex >= 0) return wavefront.edgeEvents[queueIndex].eventTime;
-			else return wavefront.vertexDatas[-(queueIndex + 1)].splitTime;
+			else return wavefront.vertexDatas[QueueEvent.QueueIndexToVertexIndex(queueIndex)].splitTime;
+		}
+
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		private bool IsAtSameTime(in QueueEvent queueEvent, float eventTime)
+		{
+			return math.abs(queueEvent.eventTime - eventTime) < Geometry2D.EPS_LOWPRECISION;
 		}
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -291,60 +318,74 @@ namespace Briganti.StraightSkeletonGeneration
 			AddOrUpdateVertexEvent(vertexIndex, true);
 		}
 
-		public void AddOrUpdateEdgeEvent(int edgeIndex, bool validateEventBatches = true)
+		public void AddOrUpdateEdgeEvent(int edgeIndex, bool validateEventBatches)
 		{
 
 			ref EdgeEvent edgeEvent = ref wavefront.edgeEvents[edgeIndex];
-			AddOrUpdateEvent(QueueEvent.EdgeIndexToQueueIndex(edgeIndex), edgeEvent.eventTime, edgeEvent.queueId, edgeEvent.eventType.IsValid(), validateEventBatches, out int newQueueId);
+			AddOrUpdateEvent(new QueueEvent(edgeIndex, edgeEvent), edgeEvent.queueId, edgeEvent.eventType.IsValid(), validateEventBatches, out int newQueueId);
 			edgeEvent.queueId = newQueueId;
 		}
 
-		public void AddOrUpdateVertexEvent(int vertexIndex, bool validateEventBatches = true)
+		public void AddOrUpdateVertexEvent(int vertexIndex, bool validateEventBatches)
 		{
 
 			ref VertexData vertexData = ref wavefront.vertexDatas[vertexIndex];
 			bool valid = (vertexData.inWavefront && vertexData.partOfSplitEvent);
-			AddOrUpdateEvent(QueueEvent.VertexIndexToQueueIndex(vertexIndex), vertexData.splitTime, vertexData.queueId, valid, validateEventBatches, out int newQueueId);
+			AddOrUpdateEvent(new QueueEvent(vertexIndex, vertexData), vertexData.queueId, valid, validateEventBatches, out int newQueueId);
 			vertexData.queueId = newQueueId;
 		}
 
-		private void AddOrUpdateEvent(int eventIndex, float eventTime, int queueId, bool validEvent, bool validateEventBatches, out int newQueueId)
+		private void AddOrUpdateEvent(QueueEvent newEvent, int queueId, bool validEvent, bool validateEventBatches, out int newQueueId)
 		{
 			Profiler.BeginSample("EventQueue.AddOrUpdateEvent.ValidateEventBatches");
 
 			// if we are in the current event batch and we moved back in time from the current time, we remove ourselves from the batch
 			// this means that a previous event in the batch has changed our event time, and we are not ready to be handled just yet.
 			// this can ONLY happen if we are not in a queue, because everything in eventBatches was removed from the queue.
-			if (queueId == -1)
+			if (validateEventBatches)
 			{
-				int eventBatchIndex = eventBatches.FindIndex(queueEvent => queueEvent.index == eventIndex);
-				if (eventBatchIndex != -1 && eventBatchIndex >= this.eventBatchIndex && eventTime >= time + Geometry2D.EPS_LOWPRECISION)
+				if (queueId == -1)
 				{
-					eventBatches.RemoveAt(eventBatchIndex);
-				}
-
-				// if a new or updated event should be in the batch right now but isn't, we totally invalidate the entire batch - we need to start all over again!
-				if (eventBatches.Count > 0 && eventBatchIndex == -1 && IsAtSameTime(eventBatches[0], eventIndex))
-				{
-					//Debug.Log("Clear " + string.Join(", ", eventBatches.Skip(this.eventBatchIndex)) + " because the new event " + eventIndex + " at " + eventTime + " should be part of this batch");
-					for (int i = this.eventBatchIndex; i < eventBatches.Count; ++i)
+					int eventBatchIndex = eventBatches.FindIndex(queueEvent => queueEvent.index == newEvent.index);
+					if (eventBatchIndex != -1 && eventBatchIndex >= this.eventBatchIndex && newEvent.eventTime >= time + Geometry2D.EPS_LOWPRECISION)
 					{
-						QueueEvent queueEvent = eventBatches[i];
-
-						// this is the actual same event that we're adding right now - don't add it yet, as it will be added later
-						if (queueEvent.index == eventIndex) continue;
-
-						if (queueEvent.eventType != EventType.None && queueEvent.eventType != EventType.NotInWavefront)
-						{
-							if (queueEvent.eventType == EventType.VertexSplit) AddOrUpdateVertexEvent(queueEvent.vertexIndex, false);
-							else AddOrUpdateEdgeEvent(queueEvent.edgeIndex, false);
-						}
+						logger?.Log($"Updated event {newEvent} was already in queue as {eventBatches[eventBatchIndex]}, so we remove it from the queue and re-add it...", 2);
+						eventBatches.RemoveAt(eventBatchIndex);
 					}
-					eventBatches.Clear();
-					this.eventBatchIndex = 0;
+
+					// else if it is in the batch and it should remain there (because the time is soon enough), we update the event with the new time straight in the event batch,
+					// and we don't add it to the queue again.
+					/*else if (eventBatchIndex != -1 && eventBatchIndex >= this.eventBatchIndex)
+					{
+						eventBatches[eventBatchIndex] = newEvent;
+						newQueueId = -1;
+						return;
+					}*/
+
+					// finally, if an event NOT in the event batch jumps ahead in time and should now be part of the event batch, we totally invalidate the entire batch - we need to start all over again!
+					else if (eventBatches.Count > 0/* && eventBatchIndex == -1*/ && IsAtSameTime(eventBatches[0], newEvent.eventTime))
+					{
+						logger?.Log($"Updated event {newEvent} is at the same time as the current batch, so we invalidate the entire batch because this new event might take precedence...", 2);
+						for (int i = this.eventBatchIndex; i < eventBatches.Count; ++i)
+						{
+							QueueEvent queueEvent = eventBatches[i];
+
+							// this is the actual same event that we're adding right now - don't add it yet, as it will be added later
+							if (queueEvent.index == newEvent.index) continue;
+
+							if (queueEvent.eventType != EventType.None && queueEvent.eventType != EventType.NotInWavefront)
+							{
+								if (queueEvent.eventType == EventType.VertexSplit) AddOrUpdateVertexEvent(queueEvent.vertexIndex, false);
+								else AddOrUpdateEdgeEvent(queueEvent.edgeIndex, false);
+							}
+						}
+
+						eventBatches.Clear();
+						this.eventBatchIndex = 0;
+					}
 				}
 			}
-
+			
 			Profiler.EndSample();
 
 			Profiler.BeginSample("EventQueue.AddOrUpdateEdgeEvent");
@@ -355,6 +396,7 @@ namespace Briganti.StraightSkeletonGeneration
 				// if this is a none-event, we either remove it or ignore it
 				if (!validEvent)
 				{
+					logger?.Log($"Existing event in queue {newEvent} got invalidated, so we remove it from the queue", 2);
 					eventQueue.Remove(queueId);
 					newQueueId = -1;
 				}
@@ -362,7 +404,8 @@ namespace Briganti.StraightSkeletonGeneration
 				// update the priority of the valid event
 				else
 				{
-					eventQueue.UpdatePriority(queueId, eventTime);
+					logger?.Log($"Existing event in queue {newEvent} got updated to a new event time, so we update the queue", 2);
+					eventQueue.UpdatePriority(queueId, newEvent.eventTime);
 					newQueueId = queueId;
 				}
 			}
@@ -370,10 +413,12 @@ namespace Briganti.StraightSkeletonGeneration
 			{
 				if (validEvent)
 				{
-					eventQueue.Enqueue(eventIndex, eventTime, out newQueueId);
+					logger?.Log($"New event {newEvent} will be added to queue", 2);
+					eventQueue.Enqueue(newEvent.index, newEvent.eventTime, out newQueueId);
 				}
 				else
 				{
+					//logger?.Log($"New event {newEvent} is invalid, so we don't add it", 0);
 					newQueueId = -1;
 				}
 			}
@@ -386,6 +431,7 @@ namespace Briganti.StraightSkeletonGeneration
 			//ref EdgeEvent edgeEvent = ref wavefront.edgeEvents[edgeIndex];
 			if (queueEvent.eventType.IsBatchEvent()) throw new ArgumentException($"Event {queueEvent} is a batch event that we are trying to process separately.");
 
+			logger?.Log($"Process non-batched event {queueEvent}", 0);
 			switch (queueEvent.eventType)
 			{
 				case EventType.Nook:
@@ -401,7 +447,15 @@ namespace Briganti.StraightSkeletonGeneration
 			QueueEvent firstQueueEvent = queueEvents[0];
 			if (!firstQueueEvent.eventType.IsBatchEvent()) throw new ArgumentException($"Event {firstQueueEvent} is not a batch event but we are still trying to process {queueEvents.Count} events at the same time!");
 
-			// edge event - easy
+			if (logger != null)
+			{
+				logger.Log($"Process event batch with {queueEvents.Count} events:", 0);
+				for (int i = 0; i < queueEvents.Count; ++i)
+				{
+					logger.Log($"{queueEvents[i]}", 1);
+				}
+			}
+
 			switch (firstQueueEvent.eventType)
 			{
 				case EventType.Edge:
@@ -540,6 +594,25 @@ namespace Briganti.StraightSkeletonGeneration
 				}
 			}
 
+			// go over all vertices and see if they split at the same point
+			ref var reflexVertexData = ref wavefront.vertexDatas[queueEvents[0].vertexIndex];
+			for (int i = 0; i < wavefront.nVertices; ++i)
+			{
+				if (i == queueEvents[0].vertexIndex) continue;
+
+				ref var otherVertexData = ref wavefront.vertexDatas[i];
+
+				if (otherVertexData.partOfSplitEvent && Geometry2D.CompareToLowPrecision(reflexVertexData.splitPos, otherVertexData.splitPos) == 0)
+				{
+					splitVertexIndices.Add(i);
+					if (otherVertexData.queueId != -1)
+					{
+						eventQueue.Remove(otherVertexData.queueId);
+						otherVertexData.queueId = -1;
+					}
+				}
+			}
+
 			// now that we have a bunch of points all at the same position - some reflex vertices, some just split vertices, some endpoints of an edge,
 			// we can actually perform the split of the graph into parts.
 			wavefront.SplitGraphAtVertices(splitVertexIndices, splitTime, splitPos, newStraightSkeletonEdges, newVertexIndices);
@@ -666,6 +739,8 @@ namespace Briganti.StraightSkeletonGeneration
 		private void SpawnRemainingEdgesAtMaxTime(QueueEvent queueEvent)
 		{
 			EnsureWavefrontMappingCapacity();
+
+			logger?.Log($"Reached maximum event time {maxEventTime}, spawning remaining edges at their position at that time...", 0);
 
 			// we generate straight skeleton edges from the current vertex to its position at the max time,
 			// and also update the mapping from the old SK vertex position to the new one
