@@ -349,7 +349,7 @@ namespace Briganti.StraightSkeletonGeneration
 			// we update the edge/nook events for all edges
 			foreach (int edgeIndex in affectedEdges)
 			{
-				UpdateEventTime(edgeIndex, time);
+				UpdateEdgeEventTime(edgeIndex, time);
 			}
 
 			// now for each reflex vertex, calculate the edge they will be splitting and update that edge's event if that's the first thing that'll happen to it
@@ -425,7 +425,7 @@ namespace Briganti.StraightSkeletonGeneration
 
 			for (int i = 0; i < nEdges; ++i)
 			{
-				UpdateEventTime(i, time);
+				UpdateEdgeEventTime(i, time);
 			}
 
 			// now for each reflex vertex, calculate the edge they will be splitting and update that edge's event if that's the first thing that'll happen to it
@@ -502,18 +502,6 @@ namespace Briganti.StraightSkeletonGeneration
 					bool isReflex = angleFromPrevToNextLine >= -Geometry2D.EPS;
 
 					type = (isReflex ? WavefrontVertexType.Reflex : WavefrontVertexType.Convex);
-
-					if (angleFromPrevToNextLine < -Geometry2D.EPS)
-					{
-						// not sure yet if there's an actual use case where a vertex in this situation is actually a real reflex vertex
-						/*float2 prevVertex = GetVertexPosAtTime(vertexData.prevVertexIndex, time);
-						float2 nextVertex = GetVertexPosAtTime(vertexData.nextVertexIndex, time);
-						if (math.distancesq(prevVertex, nextVertex) < Geometry2D.EPSSQ)
-						{
-							velocity = float2.zero;
-							type = WavefrontVertexType.Convex;
-						}*/
-					}
 				}
 
 				vertexData.velocity = velocity;
@@ -540,7 +528,7 @@ namespace Briganti.StraightSkeletonGeneration
 			return velocity;
 		}
 
-		public void UpdateEventTime(int edgeIndex, float time)
+		public void UpdateEdgeEventTime(int edgeIndex, float time)
 		{
 			// default to max
 			ref Edge edge = ref edges[edgeIndex];
@@ -645,49 +633,22 @@ namespace Briganti.StraightSkeletonGeneration
 				return true;
 			}
 
-			// we only need one of the two t-values to be semi-positive to continue on!
-			/*[MethodImpl(MethodImplOptions.AggressiveInlining)]
-			bool IsCloseEnoughToPositive(float t0, float2 velocity0, float t1, float2 velocity1)
+			// this is a very simple case - both vertices are at the exact same position, so the edge is basically already zero
+			// this can be caused by two edge events happening at the same position, and causing two new vertices there.
+			if (math.distancesq(prevVertex, nextVertex) < Geometry2D.EPS)
 			{
-				// if this SHOULD be false, we calculate how far we actually travelled, and if it's not that far (because velocity is very small), we let it slip
-				if (t0 <= -Geometry.EPS)
-				{
-					float2 offset0 = velocity0 * t0;
-					float d0 = math.lengthsq(offset0);
-					if (d0 <= Geometry.EPSSQ_LOWPRECISION) return true;
-				}
-				else return true;
-
-				if (t1 <= -Geometry.EPS)
-				{
-					float2 offset1 = velocity1 * t1;
-					float d1 = math.lengthsq(offset1);
-					if (d1 > Geometry.EPSSQ_LOWPRECISION) return true;
-				}
-				else return true;
-
-				return false;
-			}*/
+				eventData.eventType = EventType.Edge;
+				eventData.eventPos = prevVertex;
+				eventData.eventTime = prevData.creationTime;
+				return;
+			}
 
 			if (Geometry2D.GetLineIntersection(prevVertex, prevVertex + prevData.velocity, nextVertex, nextVertex + nextData.velocity, out float t0, out float t1))
 			{
 				if (IsCloseEnoughToPositive(t0, prevData.velocity, t1, nextData.velocity))
-				//if (t0 > -Geometry.EPS && t1 > -Geometry.EPS)
 				{
 					eventData.eventType = EventType.Edge;
 					eventData.eventPos = prevVertex + prevData.velocity * t0;
-
-					float creationTime = Mathf.Max(prevData.creationTime, nextData.creationTime);
-
-					// we "fast forward" the edge into the current timeframe, so we can see where it is and properly calculate
-					// the REMAINING time it takes to get to the collapse point.
-					//float2 prevVertexCurrentPos = GetVertexPosAtTime(prevVertex, prevData, creationTime);
-					//float2 nextVertexCurrentPos = GetVertexPosAtTime(nextVertex, nextData, creationTime);
-
-					/*float2 projPoint = Geometry2D.ProjectPointOnLine(prevVertexCurrentPos, nextVertexCurrentPos, eventData.eventPos, out float t);
-
-					// the event time is the time it takes for the wavefront to reach this position, AFTER both vertices of the edge were spawned
-					eventData.eventTime = creationTime + math.distance(projPoint, eventData.eventPos);*/
 
 					float time0 = prevData.creationTime + t0;
 					float time1 = nextData.creationTime + t1;
@@ -763,12 +724,6 @@ namespace Briganti.StraightSkeletonGeneration
 					return false;
 				}
 
-				// if we were previously part of a different split event, we remove it and prioritize this one
-				/*if (vertexData.partOfSplitEvent && vertexData.splitEdge != edgeIndex)
-				{
-					edgeEvents[vertexData.splitEdge].reflexVertexIndex = -1;
-				}*/
-
 				// this is the best split (earliest and preferably edge before prev/next) for this vertex, so we assign it!
 				var prevNextSplitPoint = (math.distancesq(prevVertex, reflexVertex) < Geometry2D.EPSSQ ? SplitPoint.PrevVertex : SplitPoint.NextVertex);
 				AssignSplitToReflexVertex(edgeIndex, ref vertexData, currentTime, eventPos, prevNextSplitPoint);
@@ -782,9 +737,6 @@ namespace Briganti.StraightSkeletonGeneration
 			// if there is one at the same time, we want to overwrite it with a split event if it exists
 			ref EdgeEvent edgeEvent = ref edgeEvents[edgeIndex];
 			if (edgeEvent.eventTime < eventTime - Geometry2D.EPS) return false;
-
-			// edge already has a split - only one split per edge
-			//if (edgeEvent.reflexVertexIndex != -1) return;
 
 			// now finally, we need to make sure that this still falls into the edge once it moved that far
 			float2 prevVertexAtEventTime = GetVertexPosAtTime(edge.prevVertexIndex, eventTime);

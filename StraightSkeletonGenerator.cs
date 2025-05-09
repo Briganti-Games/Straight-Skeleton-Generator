@@ -86,11 +86,6 @@ namespace Briganti.StraightSkeletonGeneration
 		private float time = 0.0f;
 		private readonly float maxEventTime;
 
-		private List<QueueEvent> eventBatches = new List<QueueEvent>();
-		private int eventBatchIndex = 0;
-
-		private List<QueueEvent> queueEventsAtTheSamePos = new List<QueueEvent>();
-
 		private bool debug;
 		private IStraightSkeletonLogger logger = null;
 
@@ -151,21 +146,13 @@ namespace Briganti.StraightSkeletonGeneration
 		{
 			if (!IsDone())
 			{
-				if (IsEventBatchesEmpty()) GenerateEventBatches();
-				if (!IsEventBatchesEmpty()) ProcessEventBatch();
+				ProcessEvent();
 			}
 		}
 
 		public bool IsDone()
 		{
-			return eventQueue.Count == 0 && IsEventBatchesEmpty();
-		}
-
-
-		private bool IsEventBatchesEmpty()
-		{
-			// events can be removed from the event batch, so we can suddenly be further than the number of eventbatches
-			return eventBatchIndex >= eventBatches.Count;
+			return eventQueue.Count == 0;
 		}
 
 		public StraightSkeleton Generate()
@@ -173,55 +160,10 @@ namespace Briganti.StraightSkeletonGeneration
 			// now we keep popping those events until we're done
 			while (eventQueue.Count > 0)
 			{
-				GenerateEventBatches();
-				while (!IsEventBatchesEmpty())
-				{
-					ProcessEventBatch();
-				}
+				ProcessEvent();
 			}
 
 			return straightSkeleton;
-		}
-
-		private void GenerateEventBatches()
-		{
-			if (eventBatchIndex != eventBatches.Count) throw new InvalidOperationException($"There are previous batches that still need to be resolved!");
-
-			eventBatches.Clear();
-			eventBatchIndex = 0;
-
-			QueueEvent queueEvent = DequeueNextEvent();
-			while (queueEvent.eventType == EventType.None && eventQueue.Count > 0) queueEvent = DequeueNextEvent();
-			if (queueEvent.eventType == EventType.None) return;
-
-			QueueEvent firstQueueEvent = queueEvent;
-
-			// if this is the first event that is over time, we just go over all remaining edges in the queue and spawn them at their position at maxEventTime
-			if (queueEvent.eventTime > maxEventTime + Geometry2D.EPS)
-			{
-				SpawnRemainingEdgesAtMaxTime(queueEvent);
-				return;
-			}
-
-			eventBatches.Add(queueEvent);
-			return;
-
-			// find all events at the same time
-			while (eventQueue.Count > 0 && IsAtSameTime(firstQueueEvent, eventQueue.First))
-			{
-				queueEvent = DequeueNextEvent();
-				if (queueEvent.eventType == EventType.None) continue; // skip this event
-				eventBatches.Add(queueEvent);
-			}
-
-			if (logger != null)
-			{
-				logger.Log($"Generated new event batch with #{eventBatches.Count}:", 0);
-				for (int i = 0; i < eventBatches.Count; ++i)
-				{
-					logger.Log($"#{i + 1}: {eventBatches[i]}", 1);
-				}
-			}
 		}
 
 		private QueueEvent DequeueNextEvent()
@@ -245,33 +187,36 @@ namespace Briganti.StraightSkeletonGeneration
 			}
 		}
 
-		private void ProcessEventBatch()
+		private void ProcessEvent()
 		{
+			// find the first event in the queue
+			QueueEvent queueEvent = DequeueNextEvent();
+			while (queueEvent.eventType == EventType.None && eventQueue.Count > 0) queueEvent = DequeueNextEvent();
+			if (queueEvent.eventType == EventType.None) return;
 
-			// process a non-batch event
-			var queueEvent = eventBatches[eventBatchIndex];
-			if (!queueEvent.eventType.IsBatchEvent())
+			QueueEvent firstQueueEvent = queueEvent;
+
+			// if this is the first event that is over time, we just go over all remaining edges in the queue and spawn them at their position at maxEventTime
+			if (queueEvent.eventTime > maxEventTime + Geometry2D.EPS)
 			{
-				++eventBatchIndex;
-				ProcessNonBatchEvent(queueEvent);
+				SpawnRemainingEdgesAtMaxTime(queueEvent);
+				return;
 			}
 
-			// go over the batch and split them up in groups at the same pos
-			else
+			logger?.Log($"Process event {queueEvent}", 0);
+			switch (queueEvent.eventType)
 			{
-				queueEventsAtTheSamePos.Clear();
-				queueEventsAtTheSamePos.Add(eventBatches[eventBatchIndex]);
-				for (int i = eventBatchIndex + 1; i < eventBatches.Count; ++i)
-				{
-					if (IsSameTypeAtSamePos(eventBatches[eventBatchIndex], eventBatches[i]))
-					{
-						queueEventsAtTheSamePos.Add(eventBatches[i]);
-						eventBatches.RemoveAt(i);
-						--i;
-					}
-				}
-				++eventBatchIndex;
-				ProcessBatchEvents(queueEventsAtTheSamePos);
+				case EventType.Edge:
+					ProcessEdgeEvent(queueEvent);
+					break;
+
+				case EventType.VertexSplit:
+					ProcessSplitEvent(queueEvent);
+					break;
+
+				case EventType.Nook:
+					ProcessNookEvent(queueEvent);
+					break;
 			}
 
 			// if we emptied the entire set of events that happened at the same time, we update the wavefront
@@ -279,115 +224,28 @@ namespace Briganti.StraightSkeletonGeneration
 			wavefront.UpdateWavefront(time);
 
 			// validate the graph to catch bugs early
-			//Debug.Log("Wavefront consists of " + wavefront.nVertices + " vertices and " + wavefront.nEdges + " edges, while straight skeleton consists of " + straightSkeleton.nVertices + " vertices and " + straightSkeleton.nEdges + " edges");
 			wavefront.ValidateState(time);
-		}
-
-		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		private bool IsAtSameTime(in QueueEvent queueEvent, int queueIndex)
-		{
-			return IsAtSameTime(queueEvent, GetEventTimeForQueueEvent(queueIndex));
-		}
-
-		private float GetEventTimeForQueueEvent(int queueIndex)
-		{
-			if (queueIndex >= 0) return wavefront.edgeEvents[queueIndex].eventTime;
-			else return wavefront.vertexDatas[QueueEvent.QueueIndexToVertexIndex(queueIndex)].splitTime;
-		}
-
-		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		private bool IsAtSameTime(in QueueEvent queueEvent, float eventTime)
-		{
-			return math.abs(queueEvent.eventTime - eventTime) < Geometry2D.EPS_LOWPRECISION;
-		}
-
-		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		private bool IsSameTypeAtSamePos(QueueEvent queueEvent1, QueueEvent queueEvent2)
-		{
-			if (queueEvent1.eventType != queueEvent2.eventType) return false;
-			return Geometry2D.CompareToLowPrecision(queueEvent1.eventPos, queueEvent2.eventPos) == 0;
 		}
 
 		public void AddOrUpdateEdgeEvent(int edgeIndex)
 		{
-			AddOrUpdateEdgeEvent(edgeIndex, true);
+
+			ref EdgeEvent edgeEvent = ref wavefront.edgeEvents[edgeIndex];
+			AddOrUpdateEvent(new QueueEvent(edgeIndex, edgeEvent), edgeEvent.queueId, edgeEvent.eventType.IsValid(), out int newQueueId);
+			edgeEvent.queueId = newQueueId;
 		}
 
 		public void AddOrUpdateVertexEvent(int vertexIndex)
 		{
-			AddOrUpdateVertexEvent(vertexIndex, true);
-		}
-
-		public void AddOrUpdateEdgeEvent(int edgeIndex, bool validateEventBatches)
-		{
-
-			ref EdgeEvent edgeEvent = ref wavefront.edgeEvents[edgeIndex];
-			AddOrUpdateEvent(new QueueEvent(edgeIndex, edgeEvent), edgeEvent.queueId, edgeEvent.eventType.IsValid(), validateEventBatches, out int newQueueId);
-			edgeEvent.queueId = newQueueId;
-		}
-
-		public void AddOrUpdateVertexEvent(int vertexIndex, bool validateEventBatches)
-		{
 
 			ref VertexData vertexData = ref wavefront.vertexDatas[vertexIndex];
 			bool valid = (vertexData.inWavefront && vertexData.partOfSplitEvent);
-			AddOrUpdateEvent(new QueueEvent(vertexIndex, vertexData), vertexData.queueId, valid, validateEventBatches, out int newQueueId);
+			AddOrUpdateEvent(new QueueEvent(vertexIndex, vertexData), vertexData.queueId, valid, out int newQueueId);
 			vertexData.queueId = newQueueId;
 		}
 
-		private void AddOrUpdateEvent(QueueEvent newEvent, int queueId, bool validEvent, bool validateEventBatches, out int newQueueId)
+		private void AddOrUpdateEvent(QueueEvent newEvent, int queueId, bool validEvent, out int newQueueId)
 		{
-			Profiler.BeginSample("EventQueue.AddOrUpdateEvent.ValidateEventBatches");
-
-			// if we are in the current event batch and we moved back in time from the current time, we remove ourselves from the batch
-			// this means that a previous event in the batch has changed our event time, and we are not ready to be handled just yet.
-			// this can ONLY happen if we are not in a queue, because everything in eventBatches was removed from the queue.
-			if (validateEventBatches)
-			{
-				if (queueId == -1)
-				{
-					int eventBatchIndex = eventBatches.FindIndex(queueEvent => queueEvent.index == newEvent.index);
-					if (eventBatchIndex != -1 && eventBatchIndex >= this.eventBatchIndex && newEvent.eventTime >= time + Geometry2D.EPS_LOWPRECISION)
-					{
-						logger?.Log($"Updated event {newEvent} was already in queue as {eventBatches[eventBatchIndex]}, so we remove it from the queue and re-add it...", 2);
-						eventBatches.RemoveAt(eventBatchIndex);
-					}
-
-					// else if it is in the batch and it should remain there (because the time is soon enough), we update the event with the new time straight in the event batch,
-					// and we don't add it to the queue again.
-					/*else if (eventBatchIndex != -1 && eventBatchIndex >= this.eventBatchIndex)
-					{
-						eventBatches[eventBatchIndex] = newEvent;
-						newQueueId = -1;
-						return;
-					}*/
-
-					// finally, if an event NOT in the event batch jumps ahead in time and should now be part of the event batch, we totally invalidate the entire batch - we need to start all over again!
-					else if (eventBatches.Count > 0/* && eventBatchIndex == -1*/ && IsAtSameTime(eventBatches[0], newEvent.eventTime))
-					{
-						logger?.Log($"Updated event {newEvent} is at the same time as the current batch, so we invalidate the entire batch because this new event might take precedence...", 2);
-						for (int i = this.eventBatchIndex; i < eventBatches.Count; ++i)
-						{
-							QueueEvent queueEvent = eventBatches[i];
-
-							// this is the actual same event that we're adding right now - don't add it yet, as it will be added later
-							if (queueEvent.index == newEvent.index) continue;
-
-							if (queueEvent.eventType != EventType.None && queueEvent.eventType != EventType.NotInWavefront)
-							{
-								if (queueEvent.eventType == EventType.VertexSplit) AddOrUpdateVertexEvent(queueEvent.vertexIndex, false);
-								else AddOrUpdateEdgeEvent(queueEvent.edgeIndex, false);
-							}
-						}
-
-						eventBatches.Clear();
-						this.eventBatchIndex = 0;
-					}
-				}
-			}
-			
-			Profiler.EndSample();
-
 			Profiler.BeginSample("EventQueue.AddOrUpdateEdgeEvent");
 
 			// could be removed and in the batch to be processed at this point
@@ -426,112 +284,49 @@ namespace Briganti.StraightSkeletonGeneration
 			Profiler.EndSample();
 		}
 
-		private void ProcessNonBatchEvent(QueueEvent queueEvent)
-		{
-			//ref EdgeEvent edgeEvent = ref wavefront.edgeEvents[edgeIndex];
-			if (queueEvent.eventType.IsBatchEvent()) throw new ArgumentException($"Event {queueEvent} is a batch event that we are trying to process separately.");
-
-			logger?.Log($"Process non-batched event {queueEvent}", 0);
-			switch (queueEvent.eventType)
-			{
-				case EventType.Nook:
-					ProcessNookEvent(queueEvent.edgeIndex);
-					break;
-			}
-		}
-
-		private void ProcessBatchEvents(List<QueueEvent> queueEvents)
-		{
-			if (queueEvents.Count == 0) throw new ArgumentException($"You always need at least one event to process.");
-
-			QueueEvent firstQueueEvent = queueEvents[0];
-			if (!firstQueueEvent.eventType.IsBatchEvent()) throw new ArgumentException($"Event {firstQueueEvent} is not a batch event but we are still trying to process {queueEvents.Count} events at the same time!");
-
-			if (logger != null)
-			{
-				logger.Log($"Process event batch with {queueEvents.Count} events:", 0);
-				for (int i = 0; i < queueEvents.Count; ++i)
-				{
-					logger.Log($"{queueEvents[i]}", 1);
-				}
-			}
-
-			switch (firstQueueEvent.eventType)
-			{
-				case EventType.Edge:
-					ProcessEdgeEventsAtSamePos(queueEvents);
-					break;
-
-				case EventType.VertexSplit:
-					ProcessSplitEvent(queueEvents);
-					break;
-
-				default:
-					throw new NotSupportedException($"{firstQueueEvent} is not a batch event.");
-			}
-		}
-
-		private void ProcessEdgeEventsAtSamePos(List<QueueEvent> queueEvents)
+		private void ProcessEdgeEvent(in QueueEvent queueEvent)
 		{
 			// we are going to be merging all vertices generated in the wavefront, because their difference don't matter to us
-			int newSKVertexIndex = -1;
-			float2 newVertex = float2.zero;
-			for (int i = 0; i < queueEvents.Count; ++i)
+			int edgeIndex = queueEvent.edgeIndex;
+
+			// first add the new vertex to the wavefront and update the wavefront vertices
+			int newVertexIndex = wavefront.AddVertexToWavefrontAndRemoveEdge(edgeIndex, true);
+
+			// invalid state - we didn't remove an edge
+			if (newVertexIndex == -1) return;
+
+			float2 newVertex = wavefront.vertices[newVertexIndex];
+			int newSKVertexIndex = straightSkeleton.AddVertex(newVertex, wavefront.GetVertexTime(newVertexIndex));
+
+			// map the new vertex to the first one in this batch
+			EnsureWavefrontMappingCapacity();
+			wavefrontToStraightSkeletonVertexIndices[newVertexIndex] = newSKVertexIndex;
+
+			// we now also add an edge to the straight skeleton
+			ref var edge = ref wavefront.edges[edgeIndex];
+
+			// see if this warrants an edge
+			int prevSKVertexIndex = GetStraightSkeletonVertexAtCreationTime(edge.prevVertexIndex);
+			int nextSKVertexIndex = GetStraightSkeletonVertexAtCreationTime(edge.nextVertexIndex);
+			float2 prevSKVertex = straightSkeleton.vertices[prevSKVertexIndex];
+			float2 nextSKVertex = straightSkeleton.vertices[nextSKVertexIndex];
+
+			// add the edges to the straight skeleton
+			if (math.distance(prevSKVertex, newVertex) > Geometry2D.EPS)
 			{
-				int edgeIndex = queueEvents[i].edgeIndex;
 
-				ref var edgeEvent = ref wavefront.edgeEvents[edgeIndex];
-				if (edgeEvent.eventType != EventType.Edge)
-				{
-					if (edgeEvent.eventType == EventType.Nook) ProcessNookEvent(edgeIndex);
-					continue;
-				}
-
-				// if this is the last edge in this batch, we want to update the adjacent edge events and vertex velocities
-				bool updateEdgeEvents = (i == queueEvents.Count - 1);
-
-				// first add the new vertex to the wavefront and update the wavefront vertices
-				int newVertexIndex = wavefront.AddVertexToWavefrontAndRemoveEdge(edgeIndex, updateEdgeEvents);
-
-				// invalid state - we didn't remove an edge
-				if (newVertexIndex == -1) continue;
-
-				if (i == 0)
-				{
-					newVertex = wavefront.vertices[newVertexIndex];
-					newSKVertexIndex = straightSkeleton.AddVertex(newVertex, wavefront.GetVertexTime(newVertexIndex));
-				}
-
-				// map the new vertex to the first one in this batch
-				EnsureWavefrontMappingCapacity();
-				wavefrontToStraightSkeletonVertexIndices[newVertexIndex] = newSKVertexIndex;
-
-				// we now also add an edge to the straight skeleton
-				ref var edge = ref wavefront.edges[edgeIndex];
-
-				// see if this warrants an edge
-				int prevSKVertexIndex = GetStraightSkeletonVertexAtCreationTime(edge.prevVertexIndex);
-				int nextSKVertexIndex = GetStraightSkeletonVertexAtCreationTime(edge.nextVertexIndex);
-				float2 prevSKVertex = straightSkeleton.vertices[prevSKVertexIndex];
-				float2 nextSKVertex = straightSkeleton.vertices[nextSKVertexIndex];
-
-				// add the edges to the straight skeleton
-				if (math.distance(prevSKVertex, newVertex) > Geometry2D.EPS)
-				{
-
-					AddStraightSkeletonArc(prevSKVertexIndex, newSKVertexIndex);
-				}
-				if (math.distance(nextSKVertex, newVertex) > Geometry2D.EPS)
-				{
-					AddStraightSkeletonArc(newSKVertexIndex, nextSKVertexIndex);
-				}
+				AddStraightSkeletonArc(prevSKVertexIndex, newSKVertexIndex);
+			}
+			if (math.distance(nextSKVertex, newVertex) > Geometry2D.EPS)
+			{
+				AddStraightSkeletonArc(newSKVertexIndex, nextSKVertexIndex);
 			}
 		}
 
 		private List<Edge> newStraightSkeletonEdges = new List<Edge>();
 		private List<int> splitVertexIndices = new List<int>();
 		private List<int> newVertexIndices = new List<int>();
-		private void ProcessSplitEvent(List<QueueEvent> queueEvents)
+		private void ProcessSplitEvent(in QueueEvent queueEvent)
 		{
 			// we are going to be merging all vertices generated in the wavefront, because their difference don't matter to us
 			newStraightSkeletonEdges.Clear();
@@ -539,66 +334,47 @@ namespace Briganti.StraightSkeletonGeneration
 			newVertexIndices.Clear();
 
 			// first, make sure this is still a valid spit - another split or event might have deleted some of the edges or involved vertices
-			bool splitCancelled = false;
-			for (int i = 0; i < queueEvents.Count; ++i)
+			int reflexVertexIndex = queueEvent.vertexIndex;
+			if (!wavefront.vertexDatas[reflexVertexIndex].partOfSplitEvent)
 			{
-				int vertexIndex = queueEvents[i].vertexIndex;
-				if (!wavefront.vertexDatas[vertexIndex].partOfSplitEvent)
+				return;
+			}
+
+			ref var reflexVertexData = ref wavefront.vertexDatas[reflexVertexIndex];
+			int edgeIndex = reflexVertexData.splitEdge;
+
+			float splitTime = reflexVertexData.splitTime;
+			float2 splitPos = reflexVertexData.splitPos;
+
+			// add the reflex vertex to the list
+			if (reflexVertexData.type != WavefrontVertexType.Reflex) throw new ArgumentException($"Split edge event {reflexVertexData} was triggered by a non-reflex vertex.");
+			splitVertexIndices.Add(reflexVertexIndex);
+
+			// now if we're splitting an edge, we first split the edge and add the split point to the list
+			// ... but never split the same edge twice!
+			if (reflexVertexData.splitPoint == SplitPoint.Edge)
+			{
+				if (wavefront.edgeEvents[edgeIndex].eventType != EventType.NotInWavefront)
 				{
-					splitCancelled = true;
-					break;
+					int newVertexIndex = wavefront.SplitEdge(reflexVertexIndex, edgeIndex, splitTime, splitPos);
+					splitVertexIndices.Add(newVertexIndex);
 				}
 			}
 
-			if (splitCancelled) return;
-
-			// collect all vertices involved in the split, and generate one if the relevant edge is an edge split
-			float splitTime = 0;
-			float2 splitPos = float2.zero;
-			for (int i = 0; i < queueEvents.Count; ++i)
+			// if we're not splitting an edge for we have a split at one of the edge ends, we actually add the endpoint as well if it is NOT a relfex vertex
+			// this is because when two reflex vertices collide, they will also register to each other as a split point, but will already have been added earlier
+			else
 			{
-				int vertexIndex = queueEvents[i].vertexIndex;
-				ref var vertexData = ref wavefront.vertexDatas[vertexIndex];
-				int edgeIndex = vertexData.splitEdge;
-
-				// they are the same for all events because they're in the same batch
-				if (i == 0)
-				{
-					splitTime = vertexData.splitTime;
-					splitPos = vertexData.splitPos;
-				}
-
-				// add the reflex vertex to the list
-				if (vertexData.type != WavefrontVertexType.Reflex) throw new ArgumentException($"Split edge event {vertexData} was triggered by a non-reflex vertex.");
-				splitVertexIndices.Add(vertexIndex);
-
-				// now if we're splitting an edge, we first split the edge and add the split point to the list
-				// ... but never split the same edge twice!
-				if (vertexData.splitPoint == SplitPoint.Edge)
-				{
-					if (wavefront.edgeEvents[edgeIndex].eventType != EventType.NotInWavefront)
-					{
-						int newVertexIndex = wavefront.SplitEdge(vertexIndex, edgeIndex, splitTime, splitPos);
-						splitVertexIndices.Add(newVertexIndex);
-					}
-				}
-
-				// if we're not splitting an edge for we have a split at one of the edge ends, we actually add the endpoint as well if it is NOT a relfex vertex
-				// this is because when two reflex vertices collide, they will also register to each other as a split point, but will already have been added earlier
-				else
-				{
-					ref var edge = ref wavefront.edges[edgeIndex];
-					int splitVertexIndex = edge.GetPoint(vertexData.splitPoint);
-					ref var splitVertexData = ref wavefront.vertexDatas[splitVertexIndex];
-					if (splitVertexData.type == WavefrontVertexType.Convex && !splitVertexIndices.Contains(splitVertexIndex)) splitVertexIndices.Add(splitVertexIndex);
-				}
+				ref var edge = ref wavefront.edges[edgeIndex];
+				int splitVertexIndex = edge.GetPoint(reflexVertexData.splitPoint);
+				ref var splitVertexData = ref wavefront.vertexDatas[splitVertexIndex];
+				if (splitVertexData.type == WavefrontVertexType.Convex && !splitVertexIndices.Contains(splitVertexIndex)) splitVertexIndices.Add(splitVertexIndex);
 			}
 
 			// go over all vertices and see if they split at the same point
-			ref var reflexVertexData = ref wavefront.vertexDatas[queueEvents[0].vertexIndex];
 			for (int i = 0; i < wavefront.nVertices; ++i)
 			{
-				if (i == queueEvents[0].vertexIndex) continue;
+				if (i == reflexVertexIndex) continue;
 
 				ref var otherVertexData = ref wavefront.vertexDatas[i];
 
@@ -701,15 +477,16 @@ namespace Briganti.StraightSkeletonGeneration
 			}
 		}
 
-		public void ProcessNookEvent(int eventEdgeIndex)
+		private void ProcessNookEvent(in QueueEvent queueEvent)
 		{
 			// get the event and do a sanity check
-			ref var edgeEvent = ref wavefront.edgeEvents[eventEdgeIndex];
-			ref var edge = ref wavefront.edges[eventEdgeIndex];
+			int edgeIndex = queueEvent.edgeIndex;
+			ref var edgeEvent = ref wavefront.edgeEvents[edgeIndex];
+			ref var edge = ref wavefront.edges[edgeIndex];
 			if (edgeEvent.eventType != EventType.Nook) throw new InvalidOperationException($"There is no nook event associated with edge {edge}.");
 
 			// remove the nook from the wavefront
-			wavefront.RemoveNook(eventEdgeIndex);
+			wavefront.RemoveNook(edgeIndex);
 
 			// this is easy - just spawn the edge, since the vertices already exist
 			int prevSKVertexIndex = GetStraightSkeletonVertexAtTime(edge.prevVertexIndex, edgeEvent.eventTime);
