@@ -640,6 +640,7 @@ namespace Briganti.StraightSkeletonGeneration
 				eventData.eventType = EventType.Edge;
 				eventData.eventPos = prevVertex;
 				eventData.eventTime = prevData.creationTime;
+				Profiler.EndSample();
 				return;
 			}
 
