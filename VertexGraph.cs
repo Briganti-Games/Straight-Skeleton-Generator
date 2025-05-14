@@ -51,7 +51,7 @@ namespace Briganti.StraightSkeletonGeneration
 
 		public int AddEdge(Edge edge)
 		{
-			if (nEdges == maxEdges) IncreaseVertexCapacity(maxEdges * 2);
+			if (nEdges == maxEdges) IncreaseEdgeCapacity(maxEdges * 2);
 
 			edges[nEdges++] = edge;
 			return nEdges - 1;
@@ -59,7 +59,6 @@ namespace Briganti.StraightSkeletonGeneration
 
 		protected virtual void IncreaseVertexCapacity(int nVertices)
 		{
-			Debug.Log("RESIZE MAX VERTICES FOR " + this + " TO " + nVertices);
 			int oldMaxVertices = maxVertices;
 			maxVertices = nVertices;
 			float2[] newVertices = new float2[maxVertices];
@@ -69,10 +68,9 @@ namespace Briganti.StraightSkeletonGeneration
 
 		protected virtual void IncreaseEdgeCapacity(int nEdges)
 		{
-			Debug.Log("RESIZE MAX EDGES FOR " + this + " TO " + nVertices);
 			int oldMaxEdges = maxEdges;
 			maxEdges = nEdges;
-			Edge[] newEdges = new Edge[maxVertices];
+			Edge[] newEdges = new Edge[maxEdges];
 			Array.Copy(edges, newEdges, oldMaxEdges);
 			edges = newEdges;
 		}
