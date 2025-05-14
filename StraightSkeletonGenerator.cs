@@ -527,11 +527,13 @@ namespace Briganti.StraightSkeletonGeneration
 			}
 
 			// re-use this list for convenience
-			if (queueEvent.index >= 0) SpawnEdgeAtMaxTime(queueEvent.edgeIndex);
-			while (eventQueue.Count > 0)
+			for (int i = 0; i < wavefront.edgeEvents.Length; ++i)
 			{
-				var queueIndex = eventQueue.Dequeue();
-				if (queueIndex >= 0) SpawnEdgeAtMaxTime(queueIndex);
+				ref EdgeEvent edgeEvent = ref wavefront.edgeEvents[i];
+				if (edgeEvent.eventType != EventType.NotInWavefront)
+				{
+					SpawnEdgeAtMaxTime(i);
+				}
 			}
 		}
 
