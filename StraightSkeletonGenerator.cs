@@ -194,8 +194,6 @@ namespace Briganti.StraightSkeletonGeneration
 			while (queueEvent.eventType == EventType.None && eventQueue.Count > 0) queueEvent = DequeueNextEvent();
 			if (queueEvent.eventType == EventType.None) return;
 
-			QueueEvent firstQueueEvent = queueEvent;
-
 			// if this is the first event that is over time, we just go over all remaining edges in the queue and spawn them at their position at maxEventTime
 			if (queueEvent.eventTime > maxEventTime + Geometry2D.EPS)
 			{
