@@ -535,6 +535,9 @@ namespace Briganti.StraightSkeletonGeneration
 					SpawnEdgeAtMaxTime(i);
 				}
 			}
+
+			// clear the event queue - we're done!
+			eventQueue.Clear();
 		}
 
 		private void SpawnEdgeAtMaxTime(int edgeIndex)
