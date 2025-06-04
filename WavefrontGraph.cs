@@ -253,9 +253,39 @@ namespace Briganti.StraightSkeletonGeneration
 
 			// sort the vertices by their velocity so that they're connected in the right order
 			vertexIndices.Sort(CompareReflexVertexVelocities);
+			int nVertexIndices = vertexIndices.Count;
+
+			// First, do a prepwork step - remove any consecutive split vertices that have NO vertices in between them.
+			// Since there is no new vertex loop to form between them (because there are no vertices),
+			// we only keep one of these split vertices.
+			for (int i = 0; i < nVertexIndices; ++i)
+			{
+				// all split vertices were consecutive so we don't actually continue here, since we'll be comparing the last one to itself
+				if (nVertexIndices == 1) break;
+
+				int nextListIndex = (i + 1) % nVertexIndices;
+				int currVertexIndex = vertexIndices[i];
+				int nextVertexIndex = vertexIndices[nextListIndex];
+
+				ref VertexData currVertexData = ref vertexDatas[currVertexIndex];
+				if (currVertexData.nextVertexIndex == nextVertexIndex)
+				{
+
+					// delete this intermediate vertex, and reconnect the chain
+					RemoveVertexFromWavefront(nextVertexIndex);
+					ref VertexData nextVertexData = ref vertexDatas[nextVertexIndex];
+					UpdateConnections(currVertexIndex, currVertexData.prevVertexIndex, nextVertexData.nextVertexIndex, currVertexData.prevEdgeIndex, nextVertexData.nextEdgeIndex);
+
+					// remove from the list of split vertices
+					// the fact that we might remove index 0 is not a real issue 
+					vertexIndices.RemoveAt((i + 1) % nVertexIndices);
+					--i;
+					if (nextListIndex == 0) --i; // we removed one ahead of us so we do another step back
+					--nVertexIndices;
+				}
+			}
 
 			// we're going to remove all these vertices and replace them by new ones that connect the parts between them
-			int nVertexIndices = vertexIndices.Count;
 			for (int i = 0; i < nVertexIndices; ++i)
 			{
 				// get the original vertex data
@@ -264,12 +294,6 @@ namespace Briganti.StraightSkeletonGeneration
 
 				// we kill this vertex and spawn a new one at the event position
 				RemoveVertexFromWavefront(currVertexIndex);
-
-				// the vertex we're connecting to below has been deleted previously as part of this split:
-				// it is also one of the split vertices! This means we're adjacent to a split vertex,
-				// which means that there are no vertices between to create a loop. We skip this!
-				int prevVertexIndex = vertexIndices[(i - 1 + nVertexIndices) % nVertexIndices];
-				if (currVertexData.nextVertexIndex == prevVertexIndex) continue;
 
 				// spawn a new vertex at the event position
 				int newVertexIndex = AddVertex(pos);
