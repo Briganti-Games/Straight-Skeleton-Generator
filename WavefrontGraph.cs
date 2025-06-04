@@ -265,6 +265,12 @@ namespace Briganti.StraightSkeletonGeneration
 				// we kill this vertex and spawn a new one at the event position
 				RemoveVertexFromWavefront(currVertexIndex);
 
+				// the vertex we're connecting to below has been deleted previously as part of this split:
+				// it is also one of the split vertices! This means we're adjacent to a split vertex,
+				// which means that there are no vertices between to create a loop. We skip this!
+				int prevVertexIndex = vertexIndices[(i - 1 + nVertexIndices) % nVertexIndices];
+				if (currVertexData.nextVertexIndex == prevVertexIndex) continue;
+
 				// spawn a new vertex at the event position
 				int newVertexIndex = AddVertex(pos);
 				newVertexIndices.Add(newVertexIndex);
@@ -282,7 +288,8 @@ namespace Briganti.StraightSkeletonGeneration
 
 				// we now link the new vertex to the previous and next connections of the previous and next vertices involved in this business
 				//ref VertexData prevVertexData = ref vertexDatas[vertexIndices[(i-1+nVertexIndices)%nVertexIndices]];
-				ref VertexData nextVertexData = ref vertexDatas[vertexIndices[(i + 1) % nVertexIndices]];
+				int nextVertexIndex = vertexIndices[(i + 1) % nVertexIndices];
+				ref VertexData nextVertexData = ref vertexDatas[nextVertexIndex];
 				UpdateConnections(newVertexIndex, nextVertexData.prevVertexIndex, currVertexData.nextVertexIndex, nextVertexData.prevEdgeIndex, currVertexData.nextEdgeIndex);
 			}
 		}
