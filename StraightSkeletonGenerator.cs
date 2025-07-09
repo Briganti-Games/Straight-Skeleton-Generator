@@ -189,6 +189,8 @@ namespace Briganti.StraightSkeletonGeneration
 
 		private void ProcessEvent()
 		{
+			if (wavefront.nVertices > 10000) throw new ArgumentException($"I think we stumbled upon an infinite loop.");
+
 			// find the first event in the queue
 			QueueEvent queueEvent = DequeueNextEvent();
 			while (queueEvent.eventType == EventType.None && eventQueue.Count > 0) queueEvent = DequeueNextEvent();
