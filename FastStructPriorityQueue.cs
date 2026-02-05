@@ -483,5 +483,103 @@ namespace Briganti.StraightSkeletons.Priority_Queue
 			//Now bubble formerLastNode (which is no longer the last node) up or down as appropriate
 			OnNodeUpdated(formerLastNode);
 		}
+
+		private readonly struct Candidate
+		{
+			public readonly float Priority;
+			public readonly int QueueIndex;
+
+			public Candidate(float priority, int queueIndex)
+			{
+				Priority = priority;
+				QueueIndex = queueIndex;
+			}
+		}
+
+
+		public IEnumerable<T> EnumerateFirst(int n)
+		{
+			if (n < 0 || n > _numNodes) throw new ArgumentOutOfRangeException(nameof(n), $"n must be between 0 and Count (Count={_numNodes}).");
+			if (n == 0) yield break;
+
+			// Local min-heap of candidate queue indices (heap nodes), ordered by priority.
+			// We never push more than ~2n nodes in typical cases; cap for safety.
+			int capacity = Math.Min(_numNodes, Math.Max(4, 2 * n + 1));
+			var cand = new Candidate[capacity + 1]; // 1-based heap
+			int candCount = 0;
+
+			void EnsureCapacity()
+			{
+				if (candCount + 1 < cand.Length) return;
+				Array.Resize(ref cand, cand.Length * 2);
+			}
+
+			void PushCandidate(int queueIndex)
+			{
+				EnsureCapacity();
+				var node = _nodes[queueIndex];
+
+				int i = ++candCount;
+				while (i > 1)
+				{
+					int parent = i >> 1;
+					if (cand[parent].Priority <= node.Priority) break;
+					cand[i] = cand[parent];
+					i = parent;
+				}
+
+				cand[i] = new Candidate(node.Priority, queueIndex);
+			}
+
+			int PopMinQueueIndex()
+			{
+				// assumes candCount > 0
+				int result = cand[1].QueueIndex;
+
+				Candidate last = cand[candCount--];
+				if (candCount == 0) return result;
+
+				int i = 1;
+				while (true)
+				{
+					int left = i << 1;
+					if (left > candCount) break;
+
+					int right = left + 1;
+					int smallest = (right <= candCount && cand[right].Priority < cand[left].Priority) ? right : left;
+
+					if (cand[smallest].Priority >= last.Priority) break;
+
+					cand[i] = cand[smallest];
+					i = smallest;
+				}
+
+				cand[i] = last;
+				return result;
+			}
+
+			// Start from root of your main heap
+			PushCandidate(1);
+
+			for (int produced = 0; produced < n; produced++)
+			{
+				int qi = PopMinQueueIndex();
+				yield return _values[_nodes[qi].Id];
+
+				int leftChild = qi << 1;
+				if (leftChild <= _numNodes)
+				{
+					PushCandidate(leftChild);
+					int rightChild = leftChild + 1;
+					if (rightChild <= _numNodes)
+						PushCandidate(rightChild);
+				}
+			}
+
+			// Local struct for the candidate heap
+			// (cannot be declared inside a method in older language versions unless using local functions carefully)
+			// So we declare it just below as a private struct in the class (see next snippet).
+		}
+
 	}
 }
