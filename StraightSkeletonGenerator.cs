@@ -140,6 +140,8 @@ namespace Briganti.StraightSkeletonGeneration
 		public void SetLogger(IStraightSkeletonLogger logger)
 		{
 			this.logger = logger;
+			wavefront.SetLogger(logger);
+			LogUpcomingEvents();
 		}
 
 		public void Step()
@@ -169,6 +171,11 @@ namespace Briganti.StraightSkeletonGeneration
 		private QueueEvent DequeueNextEvent()
 		{
 			int index = eventQueue.Dequeue();
+			return GetEventForIndex(index);
+		}
+
+		private QueueEvent GetEventForIndex(int index)
+		{
 			if (index >= 0)
 			{
 				int edgeIndex = index;
@@ -225,6 +232,25 @@ namespace Briganti.StraightSkeletonGeneration
 
 			// validate the graph to catch bugs early
 			wavefront.ValidateState(time);
+
+			LogUpcomingEvents();
+		}
+
+		private void LogUpcomingEvents()
+		{
+			// we now log the upcoming events
+			if (logger != null)
+			{
+				int n = math.min(5, eventQueue.Count);
+				int idx = 1;
+				logger?.Log($"Upcoming {n} (out of {eventQueue.Count})  events:", 0);
+				foreach (int upcomingQueueEventIndex in eventQueue.EnumerateFirst(n))
+				{
+					var upcomingEvent = GetEventForIndex(upcomingQueueEventIndex);
+					logger?.Log($"#{idx}: {upcomingEvent}", 1);
+					++idx;
+				}
+			}
 		}
 
 		public void AddOrUpdateEdgeEvent(int edgeIndex)
