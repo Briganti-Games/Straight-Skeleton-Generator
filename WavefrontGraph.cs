@@ -28,6 +28,7 @@ namespace Briganti.StraightSkeletonGeneration
 		private HashSet<int> affectedVertices = new HashSet<int>();
 
 		private bool debug;
+		private IStraightSkeletonLogger logger;
 
 		private float lastEventTime = 0.0f;
 
@@ -80,6 +81,11 @@ namespace Briganti.StraightSkeletonGeneration
 			}
 		}
 
+		public void SetLogger(IStraightSkeletonLogger logger)
+		{
+			this.logger = logger;
+		}
+
 		public void GenerateInitialEvents()
 		{
 			UpdateWavefront(0);
@@ -125,7 +131,7 @@ namespace Briganti.StraightSkeletonGeneration
 		{
 			// get the edge event
 			ref EdgeEvent edgeEvent = ref edgeEvents[disappearedEdgeIndex];
-			if (debug) Debug.Log($"Process edge event for {disappearedEdgeIndex}.");
+			if (debug) logger?.Log($"Process edge event for {disappearedEdgeIndex}.", 3);
 
 			// if this event has changed by now, we ignore it
 			if (edgeEvent.eventType != EventType.Edge) return -1;
@@ -177,7 +183,7 @@ namespace Briganti.StraightSkeletonGeneration
 
 		public void RemoveNook(int edgeIndex)
 		{
-			if (debug) Debug.Log($"Remove nook edge {edgeIndex}.");
+			if (debug) logger?.Log($"Remove nook edge {edgeIndex}.", 3);
 			ref EdgeEvent edgeEvent = ref edgeEvents[edgeIndex];
 			if (edgeEvent.eventType != EventType.Nook) throw new ArgumentException($"Edge event {edgeEvent} is not a nook event!");
 
@@ -208,7 +214,7 @@ namespace Briganti.StraightSkeletonGeneration
 			if (reflexVertexData.splitPoint != SplitPoint.Edge) throw new ArgumentException($"Split event {reflexVertexData} is not an edge split event!");
 
 			lastEventTime = Mathf.Max(lastEventTime, time);
-			if (debug) Debug.Log($"Split edge {splitEdgeIndex} at position {pos} in preparation for a split event.");
+			if (debug) logger?.Log($"Split edge {splitEdgeIndex} at position {pos} in preparation for a split event.", 3);
 
 			// the edge got permanently removed from the wavefront at this point
 			RemoveEdgeFromWavefront(splitEdgeIndex);
@@ -243,7 +249,7 @@ namespace Briganti.StraightSkeletonGeneration
 		public void SplitGraphAtVertices(List<int> vertexIndices, float time, float2 pos, List<Edge> newEdges, List<int> newVertexIndices)
 		{
 			if (vertexIndices.Count == 0) throw new ArgumentException($"Cannot do a split with 0 vertices.");
-			if (debug) Debug.Log($"Split edges after vertices {string.Join(", ", vertexIndices)} collide");
+			if (debug) logger?.Log($"Split edges after vertices {string.Join(", ", vertexIndices)} collide", 3);
 
 			int CompareReflexVertexVelocities(int vertexIndex1, int vertexIndex2)
 			{
@@ -846,6 +852,9 @@ namespace Briganti.StraightSkeletonGeneration
 		{
 			y = 0.0f;
 
+			// if the two points are identical, we don't have a line we can properly calculate stuff on!
+			if (math.distancesq(p1, p2) < Geometry2D.EPSSQ) return false;
+
 			float2 normal = Geometry2D.Rotate90DegreesClockwise(p2 - p1);
 
 			// first, we offset everthing so that p1 is the origin, ensuring that the line goes through the origin
@@ -953,7 +962,7 @@ namespace Briganti.StraightSkeletonGeneration
 			}
 
 
-			Debug.Log(ToString());
+			logger?.Log(ToString(), 0);
 		}
 
 		public override string ToString()
