@@ -171,17 +171,17 @@ namespace Briganti.StraightSkeletonGeneration
 		private QueueEvent DequeueNextEvent()
 		{
 			int index = eventQueue.Dequeue();
-			return GetEventForIndex(index);
+			return GetEventForIndex(index, true);
 		}
 
-		private QueueEvent GetEventForIndex(int index)
+		private QueueEvent GetEventForIndex(int index, bool resetQueueId)
 		{
 			if (index >= 0)
 			{
 				int edgeIndex = index;
 				ref EdgeEvent edgeEvent = ref wavefront.edgeEvents[edgeIndex];
 				if (!edgeEvent.eventType.IsValid()) return QueueEvent.Invalid;
-				edgeEvent.queueId = -1;
+				if (resetQueueId) edgeEvent.queueId = -1;
 				return new QueueEvent(edgeIndex, edgeEvent);
 			}
 			else
@@ -189,7 +189,7 @@ namespace Briganti.StraightSkeletonGeneration
 				int vertexIndex = QueueEvent.QueueIndexToVertexIndex(index);
 				ref VertexData vertexData = ref wavefront.vertexDatas[vertexIndex];
 				if (!vertexData.partOfSplitEvent) return QueueEvent.Invalid;
-				vertexData.queueId = -1;
+				if (resetQueueId) vertexData.queueId = -1;
 				return new QueueEvent(vertexIndex, vertexData);
 			}
 		}
@@ -242,11 +242,12 @@ namespace Briganti.StraightSkeletonGeneration
 			if (logger != null)
 			{
 				int n = math.min(5, eventQueue.Count);
+				n = eventQueue.Count;
 				int idx = 1;
-				logger?.Log($"Upcoming {n} (out of {eventQueue.Count})  events:", 0);
+				logger?.Log($"Upcoming {n} (out of {eventQueue.Count})  events (max allowed {eventQueue.MaxSize}):", 0);
 				foreach (int upcomingQueueEventIndex in eventQueue.EnumerateFirst(n))
 				{
-					var upcomingEvent = GetEventForIndex(upcomingQueueEventIndex);
+					var upcomingEvent = GetEventForIndex(upcomingQueueEventIndex, false);
 					logger?.Log($"#{idx}: {upcomingEvent}", 1);
 					++idx;
 				}
@@ -384,6 +385,7 @@ namespace Briganti.StraightSkeletonGeneration
 				{
 					int newVertexIndex = wavefront.SplitEdge(reflexVertexIndex, edgeIndex, splitTime, splitPos);
 					splitVertexIndices.Add(newVertexIndex);
+					logger?.Log($"Split point is {reflexVertexData.splitPoint}, so we first split edge {edgeIndex} and add a new vertex {newVertexIndex} at the split point, which is now part of the set of split vertex indices, to be removed later.", 2);
 				}
 			}
 
@@ -394,7 +396,11 @@ namespace Briganti.StraightSkeletonGeneration
 				ref var edge = ref wavefront.edges[edgeIndex];
 				int splitVertexIndex = edge.GetPoint(reflexVertexData.splitPoint);
 				ref var splitVertexData = ref wavefront.vertexDatas[splitVertexIndex];
-				if (splitVertexData.type == WavefrontVertexType.Convex && !splitVertexIndices.Contains(splitVertexIndex)) splitVertexIndices.Add(splitVertexIndex);
+				if (splitVertexData.type == WavefrontVertexType.Convex && !splitVertexIndices.Contains(splitVertexIndex))
+				{
+					logger?.Log($"Split point is {reflexVertexData.splitPoint} of edge {edgeIndex}, so we intersect exactly at existing vertex {splitVertexIndex}, which is now part of the set of split vertex indices, to be removed later.", 2);
+					splitVertexIndices.Add(splitVertexIndex);
+				}
 			}
 
 			// go over all vertices and see if they split at the same point
@@ -591,7 +597,7 @@ namespace Briganti.StraightSkeletonGeneration
 			}
 		}
 
-		public void DrawGizmos()
+		public void DrawGizmos(Camera camera)
 		{
 			Gizmos.color = Color.red;
 
@@ -604,7 +610,7 @@ namespace Briganti.StraightSkeletonGeneration
 				Gizmos.DrawLine(new Vector3(prevVertex.x, straightSkeleton.vertexTimes[edge.prevVertexIndex], prevVertex.y), new Vector3(nextVertex.x, straightSkeleton.vertexTimes[edge.nextVertexIndex], nextVertex.y));
 			}
 
-			if (!IsDone()) wavefront.DrawGizmos(time);
+			if (!IsDone()) wavefront.DrawGizmos(time, camera);
 		}
 
 		private void EnsureWavefrontMappingCapacity()

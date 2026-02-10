@@ -22,6 +22,7 @@ namespace Briganti.StraightSkeletonGeneration
 		public int nextEdgeIndex;
 
 		public bool inWavefront;
+		public uint subgraphIndex;
 
 		// this is set by the reflex vertex itself
 		public SplitPoint splitPoint;

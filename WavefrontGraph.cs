@@ -32,6 +32,8 @@ namespace Briganti.StraightSkeletonGeneration
 
 		private float lastEventTime = 0.0f;
 
+		private uint lastSubgraphIndex = 0;
+
 
 		public WavefrontGraph(PolygonWithHoles polygonWithHoles, IEventTimeChangeListener eventTimeListener, bool debug)
 		{
@@ -64,6 +66,7 @@ namespace Briganti.StraightSkeletonGeneration
 			for (int i = 0; i < maxVertices; ++i)
 			{
 				vertexDatas[i].queueId = -1;
+				vertexDatas[i].subgraphIndex = 0;
 			}
 
 			// add all contours
@@ -322,6 +325,13 @@ namespace Briganti.StraightSkeletonGeneration
 				ref VertexData nextVertexData = ref vertexDatas[nextVertexIndex];
 				UpdateConnections(newVertexIndex, nextVertexData.prevVertexIndex, currVertexData.nextVertexIndex, nextVertexData.prevEdgeIndex, currVertexData.nextEdgeIndex);
 			}
+
+			// now go over all new vertex indices, and assign a new subgraph to the loop that this index is part of - separate subgraphs are not allowed to interact with each other!
+			// We skip the first one, because we can keep that one's subgraph, since we're changing all the other ones. Just a minor optimization.
+			for (int i = 1; i < newVertexIndices.Count; ++i)
+			{
+				AssignNewSubgraphToLoop(newVertexIndices[i]);
+			}
 		}
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -355,6 +365,39 @@ namespace Briganti.StraightSkeletonGeneration
 			// the newly connected edges are affected
 			affectedEdges.Add(prevEdgeIndex);
 			affectedEdges.Add(nextEdgeIndex);
+		}
+
+		private void AssignNewSubgraphToLoop(int startVertexIndex)
+		{
+			++lastSubgraphIndex;
+
+			// if we somehow reached the very last subgraph, we reset everything and assign new indices to the entire graph
+			if (lastSubgraphIndex == uint.MaxValue)
+			{
+				lastSubgraphIndex = 0;
+
+				for (int i = 0; i < nVertices; ++i)
+				{
+					vertexDatas[i].subgraphIndex = 0;
+				}
+
+				for (int i = 0; i < nVertices; ++i)
+				{
+					if (vertexDatas[i].subgraphIndex == 0) AssignNewSubgraphToLoop(i);
+				}
+
+				return;
+			}
+
+			// otherwise, just assign to this loop
+			int vertexIndex = startVertexIndex;
+			do
+			{
+				vertexDatas[vertexIndex].subgraphIndex = lastSubgraphIndex;
+				vertexIndex = vertexDatas[vertexIndex].nextVertexIndex;
+			}
+			while (vertexIndex != startVertexIndex);
+			
 		}
 
 		private void RemoveVertexFromWavefront(int vertexIndex)
@@ -730,6 +773,7 @@ namespace Briganti.StraightSkeletonGeneration
 			float2 reflexVertex = GetVertexPosAtTime(reflexVertexIndex, currentTime);
 			ref VertexData vertexData = ref vertexDatas[reflexVertexIndex];
 			if (!vertexData.inWavefront) return false;
+			if (vertexData.subgraphIndex != GetEdgeSubgraphIndex(edgeIndex)) return false; // we are in a different subgraph of the wavefront, caused by a split!
 			if (vertexData.type != WavefrontVertexType.Reflex) throw new ArgumentException($"Vertex {reflexVertexIndex} is not a reflex vertex.");
 			float2 reflexVelocity = vertexData.velocity;
 
@@ -804,6 +848,14 @@ namespace Briganti.StraightSkeletonGeneration
 			return true;
 		}
 
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		private uint GetEdgeSubgraphIndex(int edgeIndex)
+		{
+			int prevVertexIndex = edges[edgeIndex].prevVertexIndex;
+			ref VertexData vertexData = ref vertexDatas[prevVertexIndex];
+			return vertexData.subgraphIndex;
+		}
+
 		private void AssignSplitToReflexVertex(int edgeIndex, ref VertexData vertexData, float eventTime, float2 eventPos, SplitPoint splitPoint)
 		{
 			vertexData.partOfSplitEvent = true;
@@ -816,10 +868,10 @@ namespace Briganti.StraightSkeletonGeneration
 		private bool IsDestroyedByEdgeEventBefore(in VertexData vertexData, float eventTime)
 		{
 			ref EdgeEvent prevEdge = ref edgeEvents[vertexData.prevEdgeIndex];
-			if (prevEdge.eventType == EventType.Edge && prevEdge.eventTime < eventTime + Geometry2D.EPS_LOWPRECISION) return true;
+			if (prevEdge.eventType == EventType.Edge && prevEdge.eventTime < eventTime + Geometry2D.EPS) return true;
 
 			ref EdgeEvent nextEdge = ref edgeEvents[vertexData.nextEdgeIndex];
-			if (nextEdge.eventType == EventType.Edge && nextEdge.eventTime < eventTime + Geometry2D.EPS_LOWPRECISION) return true;
+			if (nextEdge.eventType == EventType.Edge && nextEdge.eventTime < eventTime + Geometry2D.EPS) return true;
 
 			return false;
 		}
@@ -904,12 +956,19 @@ namespace Briganti.StraightSkeletonGeneration
 				if (!vertexData.inWavefront) continue;
 
 				ref var prevEdge = ref edges[vertexData.prevEdgeIndex];
+				float2 prevEdgeDir = edgeEvents[vertexData.prevEdgeIndex].dir;
 				ref var nextEdge = ref edges[vertexData.nextEdgeIndex];
+				float2 nextEdgeDir = edgeEvents[vertexData.nextEdgeIndex].dir;
 
 				if (prevEdge.nextVertexIndex != i) throw new ArgumentException($"Prev edge {prevEdge} (idx {vertexData.prevEdgeIndex}) does not connect correctly with vertex {vertexData} (idx {i})");
 				if (nextEdge.prevVertexIndex != i) throw new ArgumentException($"Next edge {nextEdge} (idx {vertexData.nextEdgeIndex}) does not connect correctly with vertex {vertexData} (idx {i})");
 				if (prevEdge.prevVertexIndex != vertexData.prevVertexIndex) throw new ArgumentException($"Prev edge {prevEdge} (idx {vertexData.prevEdgeIndex}) does not have the same previous vertex {prevEdge.prevVertexIndex} defined as the vertex {vertexData} (idx {i})");
 				if (nextEdge.nextVertexIndex != vertexData.nextVertexIndex) throw new ArgumentException($"Nexts edge {nextEdge} (idx {vertexData.nextEdgeIndex}) does not have the same previous vertex {prevEdge.nextVertexIndex} defined as the vertex {vertexData} (idx {i})");
+
+				// make sure the vertex moves in the same direction as both adjacent edges - we can never be moving in opposite directions!
+				float2 velocity = vertexData.velocity;
+				if (math.dot(velocity, prevEdgeDir) < -Geometry2D.EPS) throw new ArgumentException($"Prev edge {prevEdge} has move dir {prevEdgeDir}, but adjacent vertex {i} is moving in opposite direction {velocity}.");
+				if (math.dot(velocity, nextEdgeDir) < -Geometry2D.EPS) throw new ArgumentException($"Next edge {nextEdge} has move dir {nextEdgeDir}, but adjacent vertex {i} is moving in opposite direction {velocity}.");
 			}
 
 			PrintState(time);
@@ -1019,9 +1078,27 @@ namespace Briganti.StraightSkeletonGeneration
 		GUIStyle edgeGuiStyle = new GUIStyle() { normal = new GUIStyleState() { textColor = Color.red }, fontSize = 18, alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold };
 #endif
 
-		public void DrawGizmos(float time)
+		public void DrawGizmos(float time, Camera camera)
 		{
 			Gizmos.color = Color.cyan;
+
+			// calculate the distance from the camera of all the points, so we can apply a scale for some offsets based on the distance from the camera
+			float minDistanceFromCamera = float.MaxValue;
+			Vector3 cameraPos = Gizmos.matrix.MultiplyPoint(camera.transform.position);
+			for (int i = 0; i < nVertices; ++i)
+			{
+				ref var vertexData = ref vertexDatas[i];
+				var vertex = GetVertexPosAtTime(i, vertexData.creationTime);
+				minDistanceFromCamera = Mathf.Min(minDistanceFromCamera, Vector3.Distance(new Vector3(vertex.x, vertexData.creationTime, vertex.y), cameraPos));
+			}
+
+			// based on the distance from the camera, we can now calculate an appropriate offset for all the labels
+			float viewportOffset = 0.005f;
+			Ray ray1 = camera.ViewportPointToRay(new Vector2(0, 0));
+			Ray ray2 = camera.ViewportPointToRay(new Vector2(viewportOffset, 0));
+			Vector3 p1 = ray1.GetPoint(minDistanceFromCamera);
+			Vector3 p2 = ray2.GetPoint(minDistanceFromCamera);
+			float offset = Vector3.Distance(p1, p2);
 
 			for (int i = 0; i < nEdges; ++i)
 			{
@@ -1031,8 +1108,8 @@ namespace Briganti.StraightSkeletonGeneration
 					float prevCreationTime = vertexDatas[edge.prevVertexIndex].creationTime;
 					float nextCreationTime = vertexDatas[edge.nextVertexIndex].creationTime;
 
-					/*var prevVertex = GetVertexPosAtTime(edge.prevVertexIndex, time);
-					var nextVertex = GetVertexPosAtTime(edge.nextVertexIndex, time);*/
+					prevCreationTime = time;
+					nextCreationTime = time;
 
 					var prevVertex = GetVertexPosAtTime(edge.prevVertexIndex, prevCreationTime);
 					var nextVertex = GetVertexPosAtTime(edge.nextVertexIndex, nextCreationTime);
@@ -1042,14 +1119,14 @@ namespace Briganti.StraightSkeletonGeneration
 #if UNITY_EDITOR
 					float2 midPoint = (prevVertex + nextVertex) * 0.5f;
 					float2 normalBack = math.normalize(Geometry2D.Rotate90DegreesCounterClockwise(nextVertex - prevVertex));
-					midPoint += normalBack * 0.1f;
+					midPoint += normalBack * offset; // 0.1f
 					float midCreationTime = (prevCreationTime + nextCreationTime) * 0.5f;
-					Handles.Label(Gizmos.matrix.MultiplyPoint(new Vector3(midPoint.x, midCreationTime + 0.01f, midPoint.y)), "" + i, edgeGuiStyle);
+					Handles.Label(Gizmos.matrix.MultiplyPoint(new Vector3(midPoint.x, midCreationTime, midPoint.y)), "" + i, edgeGuiStyle);
 #endif
 				}
 			}
 
-			Gizmos.color = Color.gray;
+			Gizmos.color = new Color(0.5f, 0.5f, 1.0f, 1f);
 
 			for (int i = 0; i < nVertices; ++i)
 			{
@@ -1058,15 +1135,15 @@ namespace Briganti.StraightSkeletonGeneration
 				var vertex = GetVertexPosAtTime(i, vertexData.creationTime);
 				if (!vertexData.inWavefront) continue;
 
-				var endPoint = vertex + math.normalize(vertexData.velocity) * 0.3f;
+				var endPoint = vertex + math.normalize(vertexData.velocity) * offset * 3;
 				float creationTime = vertexDatas[i].creationTime;
 
-				Gizmos.DrawLine(new Vector3(vertex.x, creationTime + 0.01f, vertex.y), new Vector3(endPoint.x, creationTime + 0.01f, endPoint.y));
+				Gizmos.DrawLine(new Vector3(vertex.x, creationTime, vertex.y), new Vector3(endPoint.x, creationTime, endPoint.y));
 
 #if UNITY_EDITOR
 				var idPoint = vertex;
-				if (math.length(vertexData.velocity) > Geometry2D.EPS) idPoint -= math.normalize(vertexData.velocity) * 0.1f;
-				Handles.Label(Gizmos.matrix.MultiplyPoint(new Vector3(idPoint.x, creationTime + 0.01f, idPoint.y)), "" + i, vertexGuiStyle);
+				if (math.length(vertexData.velocity) > Geometry2D.EPS) idPoint -= math.normalize(vertexData.velocity) * offset;
+				Handles.Label(Gizmos.matrix.MultiplyPoint(new Vector3(idPoint.x, creationTime, idPoint.y)), "" + i, vertexGuiStyle);
 #endif
 			}
 		}
