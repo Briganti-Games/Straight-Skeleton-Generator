@@ -1077,8 +1077,8 @@ namespace Briganti.StraightSkeletonGeneration
 		}
 
 #if UNITY_EDITOR
-		GUIStyle vertexGuiStyle = new GUIStyle() { normal = new GUIStyleState() { textColor = Color.cyan }, fontSize = 18, alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold };
-		GUIStyle edgeGuiStyle = new GUIStyle() { normal = new GUIStyleState() { textColor = Color.red }, fontSize = 18, alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold };
+		public static GUIStyle vertexGuiStyle = new GUIStyle() { normal = new GUIStyleState() { textColor = Color.cyan }, fontSize = 18, alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold };
+		public static GUIStyle edgeGuiStyle = new GUIStyle() { normal = new GUIStyleState() { textColor = Color.red }, fontSize = 18, alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold };
 #endif
 
 		public void DrawGizmos(float time, Camera camera)
