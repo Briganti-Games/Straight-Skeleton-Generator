@@ -353,6 +353,9 @@ namespace Briganti.StraightSkeletonGeneration
 			edges[vertexData.prevEdgeIndex].nextVertexIndex = vertexIndex;
 			edges[vertexData.nextEdgeIndex].prevVertexIndex = vertexIndex;
 
+			// copy the subgraph index of an adjacent vertex
+			vertexData.subgraphIndex = vertexDatas[prevVertexIndex].subgraphIndex;
+
 			// also update the adjacent vertices
 			vertexDatas[prevVertexIndex].nextVertexIndex = vertexIndex;
 			vertexDatas[nextVertexIndex].prevVertexIndex = vertexIndex;
