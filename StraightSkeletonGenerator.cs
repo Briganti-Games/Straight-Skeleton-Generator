@@ -339,12 +339,12 @@ namespace Briganti.StraightSkeletonGeneration
 			float2 nextSKVertex = straightSkeleton.vertices[nextSKVertexIndex];
 
 			// add the edges to the straight skeleton
-			if (math.distance(prevSKVertex, newVertex) > Geometry2D.EPS)
+			if (prevSKVertex.x != newVertex.x || prevSKVertex.y != newVertex.y)
 			{
 
 				AddStraightSkeletonArc(prevSKVertexIndex, newSKVertexIndex);
 			}
-			if (math.distance(nextSKVertex, newVertex) > Geometry2D.EPS)
+			if (nextSKVertex.x != newVertex.x || nextSKVertex.y != newVertex.y)
 			{
 				AddStraightSkeletonArc(newSKVertexIndex, nextSKVertexIndex);
 			}
@@ -501,7 +501,7 @@ namespace Briganti.StraightSkeletonGeneration
 				float2 nextSKVertex = straightSkeleton.vertices[nextSKVertexIndex];
 
 				// add the edges to the straight skeleton
-				if (math.distance(prevSKVertex, nextSKVertex) > Geometry2D.EPS)
+				if (prevSKVertex.x != nextSKVertex.x || prevSKVertex.y != nextSKVertex.y)
 				{
 					AddStraightSkeletonArc(prevSKVertexIndex, nextSKVertexIndex);
 
@@ -529,7 +529,7 @@ namespace Briganti.StraightSkeletonGeneration
 			float2 nextSKVertex = straightSkeleton.vertices[nextSKVertexIndex];
 
 			// add the edges to the straight skeleton
-			if (math.distance(prevSKVertex, nextSKVertex) > Geometry2D.EPS)
+			if (prevSKVertex.x != nextSKVertex.x || prevSKVertex.y != nextSKVertex.y)
 			{
 				AddStraightSkeletonArc(prevSKVertexIndex, nextSKVertexIndex);
 			}
