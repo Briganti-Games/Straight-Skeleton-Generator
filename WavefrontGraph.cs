@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
 using Unity.Mathematics;
@@ -697,19 +698,19 @@ namespace Briganti.StraightSkeletonGeneration
 			ref VertexData nextData = ref vertexDatas[edge.nextVertexIndex];
 
 			[MethodImpl(MethodImplOptions.AggressiveInlining)]
-			bool IsCloseEnoughToPositive(float t0, float2 velocity0, float t1, float2 velocity1)
+			bool IsCloseEnoughToPositive(double t0, double2 velocity0, double t1, double2 velocity1)
 			{
 				// if this SHOULD be false, we calculate how far we actually travelled, and if it's not that far (because velocity is very small), we let it slip
 				if (t0 <= -Geometry2D.EPS)
 				{
-					float2 offset0 = velocity0 * t0;
-					float d0 = math.lengthsq(offset0);
+					double2 offset0 = velocity0 * t0;
+					double d0 = math.lengthsq(offset0);
 					if (d0 > Geometry2D.EPSSQ_LOWPRECISION) return false;
 				}
 				if (t1 <= -Geometry2D.EPS)
 				{
-					float2 offset1 = velocity1 * t1;
-					float d1 = math.lengthsq(offset1);
+					double2 offset1 = velocity1 * t1;
+					double d1 = math.lengthsq(offset1);
 					if (d1 > Geometry2D.EPSSQ_LOWPRECISION) return false;
 				}
 
@@ -727,15 +728,15 @@ namespace Briganti.StraightSkeletonGeneration
 				return;
 			}
 
-			if (Geometry2D.GetLineIntersection(prevVertex, prevVertex + prevData.velocity, nextVertex, nextVertex + nextData.velocity, out float t0, out float t1))
+			if (Geometry2D.GetLineIntersection((double2)prevVertex, (double2)prevVertex + (double2)prevData.velocity, (double2)nextVertex, (double2)nextVertex + (double2)nextData.velocity, out double t0, out double t1))
 			{
 				if (IsCloseEnoughToPositive(t0, prevData.velocity, t1, nextData.velocity))
 				{
 					eventData.eventType = EventType.Edge;
-					eventData.eventPos = prevVertex + prevData.velocity * t0;
+					eventData.eventPos = (float2)((double2)prevVertex + (double2)prevData.velocity * t0);
 
-					float time0 = prevData.creationTime + t0;
-					float time1 = nextData.creationTime + t1;
+					float time0 = prevData.creationTime + (float)t0;
+					float time1 = nextData.creationTime + (float)t1;
 
 					float eventTime = Mathf.Max(time0, time1);
 					eventData.eventTime = eventTime;
@@ -1086,22 +1087,17 @@ namespace Briganti.StraightSkeletonGeneration
 			Gizmos.color = Color.cyan;
 
 			// calculate the distance from the camera of all the points, so we can apply a scale for some offsets based on the distance from the camera
-			float minDistanceFromCamera = float.MaxValue;
 			Vector3 cameraPos = Gizmos.matrix.MultiplyPoint(camera.transform.position);
-			for (int i = 0; i < nVertices; ++i)
+			var vertices = Enumerable.Range(0, nVertices).Select(i =>
 			{
 				ref var vertexData = ref vertexDatas[i];
 				var vertex = GetVertexPosAtTime(i, vertexData.creationTime);
-				minDistanceFromCamera = Mathf.Min(minDistanceFromCamera, Vector3.Distance(new Vector3(vertex.x, vertexData.creationTime, vertex.y), cameraPos));
-			}
+				return new Vector3(vertex.x, vertexData.creationTime, vertex.y);
+			});
 
 			// based on the distance from the camera, we can now calculate an appropriate offset for all the labels
 			float viewportOffset = 0.005f;
-			Ray ray1 = camera.ViewportPointToRay(new Vector2(0, 0));
-			Ray ray2 = camera.ViewportPointToRay(new Vector2(viewportOffset, 0));
-			Vector3 p1 = ray1.GetPoint(minDistanceFromCamera);
-			Vector3 p2 = ray2.GetPoint(minDistanceFromCamera);
-			float offset = Vector3.Distance(p1, p2);
+			float offset = GetCameraDistanceIndepententOffset(camera, vertices, viewportOffset);
 
 			for (int i = 0; i < nEdges; ++i)
 			{
@@ -1149,6 +1145,26 @@ namespace Briganti.StraightSkeletonGeneration
 				Handles.Label(Gizmos.matrix.MultiplyPoint(new Vector3(idPoint.x, creationTime, idPoint.y)), "" + i, vertexGuiStyle);
 #endif
 			}
+		}
+
+		public static float GetCameraDistanceIndepententOffset(Camera camera, IEnumerable<Vector3> points, float viewportOffset)
+		{
+			// calculate the distance from the camera of all the points, so we can apply a scale for some offsets based on the distance from the camera
+			Vector3 cameraPos = Gizmos.matrix.MultiplyPoint(camera.transform.position);
+			float minDistanceFromCamera = float.MaxValue;
+			foreach (var point in points)
+			{
+				minDistanceFromCamera = Mathf.Min(minDistanceFromCamera, Vector3.Distance(point, cameraPos));
+			}
+
+			// based on the distance from the camera, we can now calculate an appropriate offset for all the labels
+			Ray ray1 = camera.ViewportPointToRay(new Vector2(0, 0));
+			Ray ray2 = camera.ViewportPointToRay(new Vector2(viewportOffset, 0));
+			Vector3 p1 = ray1.GetPoint(minDistanceFromCamera);
+			Vector3 p2 = ray2.GetPoint(minDistanceFromCamera);
+			float offset = Vector3.Distance(p1, p2);
+
+			return offset;
 		}
 
 		protected override void IncreaseVertexCapacity(int nVertices)

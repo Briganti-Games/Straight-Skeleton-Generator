@@ -1,6 +1,7 @@
 ﻿using System;
 using Unity.Mathematics;
 using UnityEngine;
+using System.Linq;
 #if UNITY_EDITOR
 using UnityEditor;
 #endif
@@ -41,21 +42,15 @@ namespace Briganti.StraightSkeletonGeneration
 		{
 
 			// calculate the distance from the camera of all the points, so we can apply a scale for some offsets based on the distance from the camera
-			float minDistanceFromCamera = float.MaxValue;
-			Vector3 cameraPos = Gizmos.matrix.MultiplyPoint(camera.transform.position);
-			for (int i = 0; i < nVertices; ++i)
+			var points = Enumerable.Range(0, nVertices).Select(i =>
 			{
 				float2 vertex = vertices[i];
-				minDistanceFromCamera = Mathf.Min(minDistanceFromCamera, Vector3.Distance(new Vector3(vertex.x, vertexTimes[i], vertex.y), cameraPos));
-			}
+				return new Vector3(vertex.x, vertexTimes[i], vertex.y);
+			});
 
 			// based on the distance from the camera, we can now calculate an appropriate offset for all the labels
-			float viewportOffset = 0.002f;
-			Ray ray1 = camera.ViewportPointToRay(new Vector2(0, 0));
-			Ray ray2 = camera.ViewportPointToRay(new Vector2(viewportOffset, 0));
-			Vector3 p1 = ray1.GetPoint(minDistanceFromCamera);
-			Vector3 p2 = ray2.GetPoint(minDistanceFromCamera);
-			float offset = Vector3.Distance(p1, p2);
+			float viewportOffset = 0.005f;
+			float offset = WavefrontGraph.GetCameraDistanceIndepententOffset(camera, points, viewportOffset);
 
 			Gizmos.color = Color.red;
 			for (int i = 0; i < nEdges; ++i)

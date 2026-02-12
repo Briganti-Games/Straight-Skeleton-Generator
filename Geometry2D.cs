@@ -13,6 +13,31 @@ namespace Briganti.StraightSkeletonGeneration
 		public const float EPSSQ = EPS * EPS;
 		public const float EPSSQ_LOWPRECISION = EPS_LOWPRECISION * EPS_LOWPRECISION;
 
+		public static bool GetLineIntersection(double2 p0, double2 p1, double2 q0, double2 q1, out double t0, out double t1)
+		{
+			// http://stackoverflow.com/questions/563198/how-do-you-detect-where-two-line-segments-intersect
+
+			// calculate the direction vectors
+			double2 r = p1 - p0;
+			double2 s = q1 - q0;
+
+			// calculate the 2D cross product between the dir vectors
+			double dirCross = Cross2D(r, s);
+
+			// no intersection - they are colinear or parallel
+			if (math.abs(dirCross) < math.EPSILON)
+			{
+				t0 = double.PositiveInfinity;
+				t1 = double.PositiveInfinity;
+				return false;
+			}
+
+			// calculate the u-value
+			t0 = Cross2D(q0 - p0, s) / dirCross;
+			t1 = Cross2D(q0 - p0, r) / dirCross;
+			return true;
+		}
+
 		public static bool GetLineIntersection(float2 p0, float2 p1, float2 q0, float2 q1, out float t0, out float t1)
 		{
 			// http://stackoverflow.com/questions/563198/how-do-you-detect-where-two-line-segments-intersect
@@ -64,6 +89,12 @@ namespace Briganti.StraightSkeletonGeneration
 			return v.x * w.y - v.y * w.x;
 		}
 
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public static double Cross2D(double2 v, double2 w)
+		{
+			return v.x * w.y - v.y * w.x;
+		}
+
 		// returns t0 for the line p0 -> p1
 		public static bool GetLineSegmentIntersection(float2 p0, float2 p1, float2 q0, float2 q1, ref float t0, ref float t1)
 		{
@@ -105,11 +136,21 @@ namespace Briganti.StraightSkeletonGeneration
 		{
 			return new float2(-v.y, v.x);
 		}
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public static double2 Rotate90Degrees(double2 v)
+		{
+			return new double2(-v.y, v.x);
+		}
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static float2 RotateMinus90Degrees(float2 v)
 		{
 			return new float2(v.y, -v.x);
+		}
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public static double2 RotateMinus90Degrees(double2 v)
+		{
+			return new double2(v.y, -v.x);
 		}
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -124,6 +165,26 @@ namespace Briganti.StraightSkeletonGeneration
 				return new float2(v.y, -v.x);
 			}
 		}
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public static double2 Rotate90Degrees(double2 v, bool positiveDirection)
+		{
+			if (positiveDirection)
+			{
+				return new double2(-v.y, v.x);
+			}
+			else
+			{
+				return new double2(v.y, -v.x);
+			}
+		}
+
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public static double2 Rotate90DegreesClockwise(double2 v) => RotateMinus90Degrees(v);
+
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public static double2 Rotate90DegreesCounterClockwise(double2 v) => Rotate90Degrees(v);
+
+
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static float2 Rotate90DegreesClockwise(float2 v) => RotateMinus90Degrees(v);
@@ -133,6 +194,11 @@ namespace Briganti.StraightSkeletonGeneration
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static float GetAngle(float2 v)
+		{
+			return math.atan2(v.y, v.x);
+		}
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public static double GetAngle(double2 v)
 		{
 			return math.atan2(v.y, v.x);
 		}
@@ -148,6 +214,17 @@ namespace Briganti.StraightSkeletonGeneration
 			float dot = math.clamp(math.dot(from, to) / denominator, -1F, 1F);
 			return (float)Math.Acos(dot);
 		}
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public static double Angle(double2 from, double2 to)
+		{
+			// sqrt(a) * sqrt(b) = sqrt(a * b) -- valid for real numbers
+			double denominator = math.sqrt(math.lengthsq(from) * math.lengthsq(to));
+			if (denominator < EPS)
+				return 0F;
+
+			double dot = math.clamp(math.dot(from, to) / denominator, -1, 1);
+			return Math.Acos(dot);
+		}
 
 		// Returns the signed angle in degrees between /from/ and /to/. Always returns the smallest possible angle
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -155,6 +232,14 @@ namespace Briganti.StraightSkeletonGeneration
 		{
 			float unsigned_angle = Angle(from, to);
 			float sign = Mathf.Sign(from.x * to.y - from.y * to.x);
+			return unsigned_angle * sign;
+		}
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public static double SignedAngle(double2 from, double2 to)
+		{
+			double unsigned_angle = Angle(from, to);
+			double sign = math.sign(from.x * to.y - from.y * to.x);
+			if (sign == 0) sign = 1; // keep backwards compatibility with Mathf.Sign
 			return unsigned_angle * sign;
 		}
 
@@ -179,6 +264,15 @@ namespace Briganti.StraightSkeletonGeneration
 			float sin = math.sin(angle);
 			float cos = math.cos(angle);
 			return new float2(x * cos - y * sin, x * sin + y * cos);
+		}
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public static double2 Rotate(double2 v, double angle)
+		{
+			double x = v.x;
+			double y = v.y;
+			double sin = math.sin(angle);
+			double cos = math.cos(angle);
+			return new double2(x * cos - y * sin, x * sin + y * cos);
 		}
 
 		public static int2 RoundToInt(float2 v)
