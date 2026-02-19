@@ -76,6 +76,7 @@ namespace Briganti.StraightSkeletonGeneration
 			}
 		}
 
+		private PolygonWithHoles inititialPolygon;
 		private WavefrontGraph wavefront;
 		private StraightSkeleton straightSkeleton;
 
@@ -92,6 +93,7 @@ namespace Briganti.StraightSkeletonGeneration
 
 		public StraightSkeletonGenerator(PolygonWithHoles polygonWithHoles, float maxEventTime, bool performDebugChecks)
 		{
+			this.inititialPolygon = polygonWithHoles;
 			this.debug = performDebugChecks;
 			this.maxEventTime = maxEventTime;
 
@@ -140,6 +142,15 @@ namespace Briganti.StraightSkeletonGeneration
 		public void SetLogger(IStraightSkeletonLogger logger)
 		{
 			this.logger = logger;
+
+			// immediately log the initial input
+			logger?.Log($"Initial polygon:", 0);
+			logger?.Log($"Outer contour: {string.Join(" ; ", inititialPolygon.outerContour)}", 1);
+			for (int i = 0; i < inititialPolygon.innerContours.Count; ++i)
+			{
+				logger?.Log($"Inner contour #{i}: {string.Join(" ; ", inititialPolygon.innerContours[i])}", 1);
+			}
+
 			wavefront.SetLogger(logger);
 			LogUpcomingEvents();
 		}
