@@ -457,8 +457,8 @@ namespace Briganti.StraightSkeletonGeneration
 						}
 					}
 
-					// if this is an affected vertex, we need to recheck all edges
-					if (affectedVertices.Contains(vertexIndex))
+					// if this is an affected vertex or its previous split event was invalidated, we need to recheck all edges
+					if (affectedVertices.Contains(vertexIndex) || changed)
 					{
 						// always changed because we reset our state
 						changed = true;
