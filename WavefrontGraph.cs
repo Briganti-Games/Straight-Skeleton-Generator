@@ -250,6 +250,7 @@ namespace Briganti.StraightSkeletonGeneration
 			return newVertexIndex;
 		}
 
+		private List<int> verticesRemovedBecauseTheyWereAdjacent = new List<int>();
 		public void SplitGraphAtVertices(List<int> vertexIndices, float time, float2 pos, List<Edge> newEdges, List<int> newVertexIndices)
 		{
 			if (vertexIndices.Count == 0) throw new ArgumentException($"Cannot do a split with 0 vertices.");
@@ -268,6 +269,7 @@ namespace Briganti.StraightSkeletonGeneration
 			// First, do a prepwork step - remove any consecutive split vertices that have NO vertices in between them.
 			// Since there is no new vertex loop to form between them (because there are no vertices),
 			// we only keep one of these split vertices.
+			verticesRemovedBecauseTheyWereAdjacent.Clear();
 			for (int i = 0; i < nVertexIndices; ++i)
 			{
 				// all split vertices were consecutive so we don't actually continue here, since we'll be comparing the last one to itself
@@ -292,6 +294,9 @@ namespace Briganti.StraightSkeletonGeneration
 					--i;
 					if (nextListIndex == 0) --i; // we removed one ahead of us so we do another step back
 					--nVertexIndices;
+
+					// remember this vertex, because we might still want to create an arc from this vertex to the split point
+					verticesRemovedBecauseTheyWereAdjacent.Add(nextVertexIndex);
 				}
 			}
 
@@ -325,6 +330,23 @@ namespace Briganti.StraightSkeletonGeneration
 				int nextVertexIndex = vertexIndices[(i + 1) % nVertexIndices];
 				ref VertexData nextVertexData = ref vertexDatas[nextVertexIndex];
 				UpdateConnections(newVertexIndex, nextVertexData.prevVertexIndex, currVertexData.nextVertexIndex, nextVertexData.prevEdgeIndex, currVertexData.nextEdgeIndex);
+			}
+
+			// now we might want to add an edge from any removed vertex to the split point
+			if (newVertexIndices.Count > 0)
+			{
+				int newVertexIndex = newVertexIndices[0];
+				for (int i = 0; i < verticesRemovedBecauseTheyWereAdjacent.Count; ++i)
+				{
+					int removedVertexIndex = verticesRemovedBecauseTheyWereAdjacent[i];
+
+					float2 prevPos = vertices[removedVertexIndex];
+					float2 newPos = vertices[newVertexIndex];
+					if (math.distancesq(prevPos, newPos) > Geometry2D.EPSSQ)
+					{
+						newEdges.Add(new Edge(removedVertexIndex, newVertexIndex));
+					}
+				}
 			}
 
 			// now go over all new vertex indices, and assign a new subgraph to the loop that this index is part of - separate subgraphs are not allowed to interact with each other!
@@ -828,7 +850,7 @@ namespace Briganti.StraightSkeletonGeneration
 			float2 prevVertexAtEventTime = GetVertexPosAtTime(edge.prevVertexIndex, eventTime);
 			float2 nextVertexAtEventTime = GetVertexPosAtTime(edge.nextVertexIndex, eventTime);
 			Geometry2D.ProjectPointOnLine(prevVertexAtEventTime, nextVertexAtEventTime, eventPos, out float tLine);
-			if (tLine < -Geometry2D.EPS || tLine > 1 + Geometry2D.EPS || tLine == float.NaN) return false;
+			if (tLine < -Geometry2D.EPS || tLine > 1 + Geometry2D.EPS || float.IsNaN(tLine)) return false;
 
 			// if we split at exactly the corner, we have a special type of split event - this event will NOT generate new edges,
 			// but will still split the entire graph into two pieces and spawn new vertices at the split point.
