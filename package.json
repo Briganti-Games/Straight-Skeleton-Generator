@@ -17,5 +17,12 @@
         "url": "https://github.com/Briganti-Games/Straight-Skeleton-Generator.git",
         "type": "git",
         "revision": "941bff0925baa46012a2eff522313c170bf36c7a"
-    }
+    },
+    "samples": [
+        {
+            "displayName": "Samples",
+            "description": "Renders a straight skeleton for a polygon.",
+            "path": "Samples/Sample"
+        }
+    ]
 }
