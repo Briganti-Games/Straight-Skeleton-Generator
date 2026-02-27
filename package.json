@@ -1,8 +1,21 @@
 {
-  "name": "com.briganti.straightskeletongenerator",
-  "version": "1.0.0",
-  "displayName": "Straight Skeleton Generator",
-  "unity": "2022.3",
-  "description": "An implementation of the Straight Skeleton algorithm for Unity.",
-  "author": { "name": "Karel Crombecq/Briganti" }
+    "name": "com.briganti.straightskeletongenerator",
+    "version": "1.0.0",
+    "displayName": "Straight Skeleton Generator",
+    "unity": "2022.3",
+    "license": "MIT",
+    "description": "An implementation of the Straight Skeleton algorithm for Unity.",
+    "dependencies": {
+        "com.unity.mathematics": "1.2.1"
+    },
+    "documentationUrl": "https://github.com/Briganti-Games/Straight-Skeleton-Generator",
+    "author": {
+        "name": "Karel Crombecq",
+        "url": "https://github.com/Briganti-Games/Straight-Skeleton-Generator"
+    },
+    "repository": {
+        "url": "https://github.com/Briganti-Games/Straight-Skeleton-Generator.git",
+        "type": "git",
+        "revision": "941bff0925baa46012a2eff522313c170bf36c7a"
+    }
 }
