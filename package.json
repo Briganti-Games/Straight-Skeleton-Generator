@@ -1,7 +1,6 @@
 {
     "name": "com.briganti.straightskeletongenerator",
     "version": "1.0.0",
-    "displayName": "Straight Skeleton Generator",
     "unity": "2022.3",
     "license": "MIT",
     "description": "An implementation of the Straight Skeleton algorithm for Unity.",
