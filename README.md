@@ -73,15 +73,19 @@ for (int i = 0; i < straightSkeleton.nEdges; ++i)
 # Implementation Details
 
 Straight skeletons were first introduced in a 1995 paper by Aichholzer et al.:
+
 https://www.jucs.org/jucs_1_12/a_novel_type_of/Aichholzer_O.pdf
 
 In this first paper, they already realized the potential of this algorithm to be used as a procedural roof generation system.
 
 I started implementing this algorithm using the motorcycle graph algorithm, which is the academic state of the art for this subject:
+
 https://www.sthu.org/research/straightskeleton/
 
 However, I realized this algorithm is complete overkill for what I needed and is incredibly complex to implement. Instead, I resorted to a more classical approach using a priority queue, loosely based on several other papers:
+
 https://www.cgal.org/Events/UserWorkshop/2004/straight_skeleton.pdf
+
 https://www.phlatforum.com/xenforo/converted_files/12703=3958-Straight%20Skeletons%20Implementation.pdf
 
 None of these papers actually get into the nitty gritty of making this work for arbitrary polygons, and there are an incredible amount of very specific edge cases to iron out, as well as many issues with floating point precision. It took several months of development, as well as a year and thousands of users's worth of feedback to find most of these edge cases and bugs. But I feel like the current state of the implementation is very robust and stable, and works well even for very complex polygons.
