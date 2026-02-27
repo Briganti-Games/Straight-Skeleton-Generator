@@ -41,10 +41,10 @@ namespace Briganti.StraightSkeletonGeneration
 			this.debug = debug;
 			this.eventTimeListener = eventTimeListener;
 
-			int nVertices = polygonWithHoles.outerContour.Length;
-			for (int i = 0; i < polygonWithHoles.innerContours.Count; ++i)
+			int nVertices = polygonWithHoles.outerContourCounterClockwise.Length;
+			for (int i = 0; i < polygonWithHoles.innerContoursClockwise.Count; ++i)
 			{
-				nVertices += polygonWithHoles.innerContours[i].Length;
+				nVertices += polygonWithHoles.innerContoursClockwise[i].Length;
 			}
 
 			int nEdges = nVertices;
@@ -71,10 +71,10 @@ namespace Briganti.StraightSkeletonGeneration
 			}
 
 			// add all contours
-			AddContour(polygonWithHoles.outerContour);
-			for (int i = 0; i < polygonWithHoles.innerContours.Count; ++i)
+			AddContour(polygonWithHoles.outerContourCounterClockwise);
+			for (int i = 0; i < polygonWithHoles.innerContoursClockwise.Count; ++i)
 			{
-				AddContour(polygonWithHoles.innerContours[i]);
+				AddContour(polygonWithHoles.innerContoursClockwise[i]);
 			}
 
 			// make sure all the other edge events have their queue id reset as well

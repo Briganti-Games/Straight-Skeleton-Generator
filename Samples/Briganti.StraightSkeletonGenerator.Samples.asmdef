@@ -1,0 +1,17 @@
+{
+    "name": "Briganti.StraightSkeletonGenerator.Samples",
+    "rootNamespace": "",
+    "references": [
+        "Briganti.StraightSkeletonGenerator",
+        "Unity.Mathematics"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

@@ -145,10 +145,10 @@ namespace Briganti.StraightSkeletonGeneration
 
 			// immediately log the initial input
 			logger?.Log($"Initial polygon:", 0);
-			logger?.Log($"Outer contour: {string.Join(" ; ", inititialPolygon.outerContour)}", 1);
-			for (int i = 0; i < inititialPolygon.innerContours.Count; ++i)
+			logger?.Log($"Outer contour: {string.Join(" ; ", inititialPolygon.outerContourCounterClockwise)}", 1);
+			for (int i = 0; i < inititialPolygon.innerContoursClockwise.Count; ++i)
 			{
-				logger?.Log($"Inner contour #{i}: {string.Join(" ; ", inititialPolygon.innerContours[i])}", 1);
+				logger?.Log($"Inner contour #{i}: {string.Join(" ; ", inititialPolygon.innerContoursClockwise[i])}", 1);
 			}
 
 			wavefront.SetLogger(logger);
