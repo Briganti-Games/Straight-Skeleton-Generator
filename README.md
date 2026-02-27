@@ -16,7 +16,7 @@ There are several other implementations for straight skeletons out there, but al
 - Sometimes they were unstable for more complex polygons.
 - Sometimes they were WAY too slow for realtime procedural generation.
 - Sometimes they used too many resources or memory allocations.
-- Sometimes they don't support polygons with holes.
+- Sometimes they didn't support polygons with holes.
 
 This implementation does all of that. It has been battle-tested by thousands of users over the course of a year, because it's the core of the roof generation in [Dungeon Alchemist](https://www.dungeonalchemist.com/), the procedural map-generation app for roleplaying games that I'm working on. It's robust, works with very complex polygons with hundreds of vertices, is very fast and does not waste resources.
 
