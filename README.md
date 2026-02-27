@@ -24,7 +24,7 @@ Here's an example of the algorithm in action in Dungeon Alchemist, where it gene
 
 ![Screenshot of the algorithm used in Dungeon Alchemist](https://github.com/Briganti-Games/Straight-Skeleton-Generator/blob/master/Readme%20Images/dungeon-alchemist-example.jpg?raw=true)
 
-# Getting Started
+# Getting started
 
 Install this package using the Unity Package Manager via git URL.
 
@@ -38,7 +38,7 @@ Then, copy & paste the URL to this git package: https://github.com/Briganti-Game
 
 Once imported, you can use the package.
 
-This has been tested on Unity 2022.3, but should probably also work on earlier versions, as long as the Unity Mathematics package is supported, as this is the only dependency.
+This has been tested on Unity 2022.3, but should probably also work on earlier and later versions, as long as the Unity Mathematics package is supported, as this is the only dependency.
 
 # How to use it?
 
