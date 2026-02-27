@@ -92,7 +92,7 @@ namespace Briganti.StraightSkeletonGeneration
 		private IStraightSkeletonLogger logger = null;
 
 
-		public StraightSkeletonGenerator(PolygonWithHoles polygonWithHoles, float maxEventTime, bool performDebugChecks)
+		public StraightSkeletonGenerator(PolygonWithHoles polygonWithHoles, float maxEventTime = float.MaxValue, bool performDebugChecks = false)
 		{
 			this.inititialPolygon = polygonWithHoles;
 			this.debug = performDebugChecks;
