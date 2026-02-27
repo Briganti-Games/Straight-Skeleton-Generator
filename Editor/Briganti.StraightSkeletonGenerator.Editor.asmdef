@@ -1,6 +1,6 @@
 {
     "name": "Briganti.StraightSkeletonGenerator.Editor",
-    "references": [ "Unity.Briganti.StraightSkeletonGenerator" ],
+    "references": [ "Briganti.StraightSkeletonGenerator" ],
     "includePlatforms": [ "Editor" ],
     "allowUnsafeCode": false
 }
