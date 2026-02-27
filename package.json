@@ -19,7 +19,7 @@
     },
     "samples": [
         {
-            "displayName": "Samples",
+            "displayName": "Samples~",
             "description": "Renders a straight skeleton for a polygon.",
             "path": "Samples~/Sample"
         }
