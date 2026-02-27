@@ -21,6 +21,7 @@ namespace Briganti.StraightSkeletonGeneration
 			public int vertexIndex => QueueIndexToVertexIndex(index);
 			public int edgeIndex => index;
 
+
 			public QueueEvent(int edgeIndex, in EdgeEvent edgeEvent)
 			{
 				index = edgeIndex;
