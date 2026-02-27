@@ -20,6 +20,10 @@ There are several other implementations for straight skeletons out there, but al
 
 This implementation does all of that. It has been battle-tested by thousands of users over the course of a year, because it's the core of the roof generation in [Dungeon Alchemist](https://www.dungeonalchemist.com/), the procedural map-generation app for roleplaying games that I'm working on. It's robust, works with very complex polygons with hundreds of vertices, is very fast and does not waste resources.
 
+Here's an example of the algorithm in action in Dungeon Alchemist, where it generated the roof for this very complex building:
+
+![Screenshot of the algorithm used in Dungeon Alchemist](https://github.com/Briganti-Games/Straight-Skeleton-Generator/blob/master/Readme%20Images/dungeon-alchemist-example.jpg?raw=true)
+
 # Getting Started
 
 Install this package using the Unity Package Manager via git URL.
