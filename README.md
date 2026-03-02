@@ -42,9 +42,19 @@ This has been tested on Unity 2022.3, but should probably also work on earlier a
 
 # How to use it?
 
+
+## Samples
+
 If you want to see the example that was used to generate the screenshots above, you can import it from the Package Manager by going to the Samples tab after importing the package, and importing the sample:
 
 ![Screenshot of the sample import process in the Package Manager](https://github.com/Briganti-Games/Straight-Skeleton-Generator/blob/master/Readme%20Images/sample-import.png?raw=true)
+
+There are two example scenes bundled:
+* **example** shows an example of a straight skeleton being generated and then displayed in 3D by rendering the generated edges.
+* **mesh example** shows an example of a mesh being generated from the straight skeleton, so it can be actually used as a roof. To go from the generated straight skeleton (which is just a bunch of edges) to an actual mesh, an additional step is necessary to convert the edges to polygons and then triangulate those polygons. A relatively primitive mesh generator was bundled with this project, and this example uses that. This should probably NOT be used in your final product, but it's a fine starting point to adjust to your own needs. (Shout out to https://github.com/AggroBird/StraightSkeleton because I borrowed their ear clipping code to triangulate the polygons).
+
+
+## Code
 
 Using it in code is very simple. You give it your polygon data, and it outputs a straight skeleton for the polygon. Here's an example:
 
