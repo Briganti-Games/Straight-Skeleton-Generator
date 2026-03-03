@@ -67,7 +67,6 @@ namespace Briganti.StraightSkeletonGeneration
 			for (int i = 0; i < maxVertices; ++i)
 			{
 				vertexDatas[i].queueId = -1;
-				vertexDatas[i].subgraphIndex = 0;
 			}
 
 			// add all contours
@@ -348,13 +347,6 @@ namespace Briganti.StraightSkeletonGeneration
 					}
 				}
 			}
-
-			// now go over all new vertex indices, and assign a new subgraph to the loop that this index is part of - separate subgraphs are not allowed to interact with each other!
-			// We skip the first one, because we can keep that one's subgraph, since we're changing all the other ones. Just a minor optimization.
-			for (int i = 1; i < newVertexIndices.Count; ++i)
-			{
-				AssignNewSubgraphToLoop(newVertexIndices[i]);
-			}
 		}
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -376,9 +368,6 @@ namespace Briganti.StraightSkeletonGeneration
 			edges[vertexData.prevEdgeIndex].nextVertexIndex = vertexIndex;
 			edges[vertexData.nextEdgeIndex].prevVertexIndex = vertexIndex;
 
-			// copy the subgraph index of an adjacent vertex
-			vertexData.subgraphIndex = vertexDatas[prevVertexIndex].subgraphIndex;
-
 			// also update the adjacent vertices
 			vertexDatas[prevVertexIndex].nextVertexIndex = vertexIndex;
 			vertexDatas[nextVertexIndex].prevVertexIndex = vertexIndex;
@@ -391,39 +380,6 @@ namespace Briganti.StraightSkeletonGeneration
 			// the newly connected edges are affected
 			affectedEdges.Add(prevEdgeIndex);
 			affectedEdges.Add(nextEdgeIndex);
-		}
-
-		private void AssignNewSubgraphToLoop(int startVertexIndex)
-		{
-			++lastSubgraphIndex;
-
-			// if we somehow reached the very last subgraph, we reset everything and assign new indices to the entire graph
-			if (lastSubgraphIndex == uint.MaxValue)
-			{
-				lastSubgraphIndex = 0;
-
-				for (int i = 0; i < nVertices; ++i)
-				{
-					vertexDatas[i].subgraphIndex = 0;
-				}
-
-				for (int i = 0; i < nVertices; ++i)
-				{
-					if (vertexDatas[i].subgraphIndex == 0) AssignNewSubgraphToLoop(i);
-				}
-
-				return;
-			}
-
-			// otherwise, just assign to this loop
-			int vertexIndex = startVertexIndex;
-			do
-			{
-				vertexDatas[vertexIndex].subgraphIndex = lastSubgraphIndex;
-				vertexIndex = vertexDatas[vertexIndex].nextVertexIndex;
-			}
-			while (vertexIndex != startVertexIndex);
-			
 		}
 
 		private void RemoveVertexFromWavefront(int vertexIndex)
@@ -799,7 +755,6 @@ namespace Briganti.StraightSkeletonGeneration
 			float2 reflexVertex = GetVertexPosAtTime(reflexVertexIndex, currentTime);
 			ref VertexData vertexData = ref vertexDatas[reflexVertexIndex];
 			if (!vertexData.inWavefront) return false;
-			if (vertexData.subgraphIndex != GetEdgeSubgraphIndex(edgeIndex)) return false; // we are in a different subgraph of the wavefront, caused by a split!
 			if (vertexData.type != WavefrontVertexType.Reflex) throw new ArgumentException($"Vertex {reflexVertexIndex} is not a reflex vertex.");
 			float2 reflexVelocity = vertexData.velocity;
 
@@ -872,14 +827,6 @@ namespace Briganti.StraightSkeletonGeneration
 
 			AssignSplitToReflexVertex(edgeIndex, ref vertexData, eventTime, eventPos, splitPoint);
 			return true;
-		}
-
-		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		private uint GetEdgeSubgraphIndex(int edgeIndex)
-		{
-			int prevVertexIndex = edges[edgeIndex].prevVertexIndex;
-			ref VertexData vertexData = ref vertexDatas[prevVertexIndex];
-			return vertexData.subgraphIndex;
 		}
 
 		private void AssignSplitToReflexVertex(int edgeIndex, ref VertexData vertexData, float eventTime, float2 eventPos, SplitPoint splitPoint)
