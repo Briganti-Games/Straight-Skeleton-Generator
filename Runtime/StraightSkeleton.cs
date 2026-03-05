@@ -12,18 +12,20 @@ namespace Briganti.StraightSkeletonGeneration
 	{
 		public float[] vertexTimes { get; private set; }
 
-		public float maxTime { get; private set; } = float.MinValue;
+		public float maxVertexTime { get; private set; } = float.MinValue;
+		public float maxAllowedTime { get; private set; }
 
-		public StraightSkeleton(int maxVertices, int maxEdges) : base(maxVertices, maxEdges)
+		public StraightSkeleton(int maxVertices, int maxEdges, float maxAllowedTime) : base(maxVertices, maxEdges)
 		{
-			vertexTimes = new float[maxVertices];
+			this.maxAllowedTime = maxAllowedTime;
+			this.vertexTimes = new float[maxVertices];
 		}
 
 		public int AddVertex(float2 pos, float time)
 		{
 			int vertexIndex = base.AddVertex(pos);
 			vertexTimes[vertexIndex] = time;
-			maxTime = Mathf.Max(maxTime, time);
+			maxVertexTime = Mathf.Max(maxVertexTime, time);
 			return vertexIndex;
 		}
 

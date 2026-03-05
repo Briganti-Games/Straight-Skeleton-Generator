@@ -20,7 +20,7 @@ namespace Briganti.StraightSkeletonGeneration
 
 			public int vertexIndex => QueueIndexToVertexIndex(index);
 			public int edgeIndex => index;
-
+			
 
 			public QueueEvent(int edgeIndex, in EdgeEvent edgeEvent)
 			{
@@ -86,17 +86,16 @@ namespace Briganti.StraightSkeletonGeneration
 		private int[] wavefrontToStraightSkeletonVertexIndices;
 
 		private float time = 0.0f;
-		private readonly float maxEventTime;
+		private float maxEventTime => straightSkeleton.maxAllowedTime;
 
 		private bool debug;
 		private IStraightSkeletonLogger logger = null;
 
 
-		public StraightSkeletonGenerator(PolygonWithHoles polygonWithHoles, float maxEventTime = float.MaxValue, bool performDebugChecks = false)
+		public StraightSkeletonGenerator(PolygonWithHoles polygonWithHoles, float maxEventTime, bool performDebugChecks)
 		{
 			this.inititialPolygon = polygonWithHoles;
 			this.debug = performDebugChecks;
-			this.maxEventTime = maxEventTime;
 
 			// create the initial graph based on the polygon
 			wavefront = new WavefrontGraph(polygonWithHoles, this, debug);
@@ -122,7 +121,7 @@ namespace Briganti.StraightSkeletonGeneration
 			int nStraightSkeletonEdges = (2 * wavefront.nVertices) - 3; // then this is the max number that can occur because of edge events
 			nStraightSkeletonEdges += wavefront.nEdges; // there is a worst-case chance that every edge will be reproduced again because no edge events occur before the maxEventTime
 			nStraightSkeletonEdges *= 2; // we add edges in both directions to be able to generate polygon slabs from the straight skeleton more easily
-			straightSkeleton = new StraightSkeleton(nStraightSkeletonVertices, nStraightSkeletonEdges + nStartEdges);
+			straightSkeleton = new StraightSkeleton(nStraightSkeletonVertices, nStraightSkeletonEdges + nStartEdges, maxEventTime);
 			for (int i = 0; i < wavefront.nVertices; ++i)
 			{
 				straightSkeleton.AddVertex(wavefront.vertices[i], 0);
@@ -146,10 +145,10 @@ namespace Briganti.StraightSkeletonGeneration
 
 			// immediately log the initial input
 			logger?.Log($"Initial polygon:", 0);
-			logger?.Log($"Outer contour: {string.Join(" ; ", inititialPolygon.outerContourCounterClockwise)}", 1);
-			for (int i = 0; i < inititialPolygon.innerContoursClockwise.Count; ++i)
+			logger?.Log($"Outer contour: {string.Join(" ; ", inititialPolygon.outerContour)}", 1);
+			for (int i = 0; i < inititialPolygon.innerContours.Count; ++i)
 			{
-				logger?.Log($"Inner contour #{i}: {string.Join(" ; ", inititialPolygon.innerContoursClockwise[i])}", 1);
+				logger?.Log($"Inner contour #{i}: {string.Join(" ; ", inititialPolygon.innerContours[i])}", 1);
 			}
 
 			wavefront.SetLogger(logger);
