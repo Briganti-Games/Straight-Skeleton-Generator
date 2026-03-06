@@ -20,7 +20,6 @@ namespace Briganti.StraightSkeletonGeneration
 
 			public int vertexIndex => QueueIndexToVertexIndex(index);
 			public int edgeIndex => index;
-			
 
 			public QueueEvent(int edgeIndex, in EdgeEvent edgeEvent)
 			{
@@ -90,6 +89,7 @@ namespace Briganti.StraightSkeletonGeneration
 
 		private bool debug;
 		private IStraightSkeletonLogger logger = null;
+		private int eventIndex = 0;
 
 
 		public StraightSkeletonGenerator(PolygonWithHoles polygonWithHoles, float maxEventTime, bool performDebugChecks)
@@ -221,7 +221,8 @@ namespace Briganti.StraightSkeletonGeneration
 				return;
 			}
 
-			logger?.Log($"Process event {queueEvent}", 0);
+			++eventIndex;
+			logger?.Log($"Process event #{eventIndex}: {queueEvent}", 0);
 			switch (queueEvent.eventType)
 			{
 				case EventType.Edge:
