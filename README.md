@@ -59,10 +59,10 @@ There are two example scenes bundled:
 Using it in code is very simple. You give it your polygon data, and it outputs a straight skeleton for the polygon. Here's an example:
 
 ```
-// counter-clockwise
+// clockwise
 float2[] polygonContour = new float2[] { new float2(0, 0), new float2(0, 5), new float2(5, 5), new float2(5, 0) };
 
-// holes must be defined clockwise
+// holes must be defined counter-clockwise
 float2[] hole = new float2[] { new float2(2, 2), new float2(3, 2), new float2(3, 3), new float2(2, 3) };
 
 // set up the input data
