@@ -245,6 +245,15 @@ namespace Briganti.StraightSkeletonGeneration
 			// connect the edges
 			UpdateConnections(newVertexIndex, oldEdge.prevVertexIndex, oldEdge.nextVertexIndex, newPrevEdgeIndex, newNextEdgeIndex);
 
+			// If the vertices of this edge were part of a split event, make sure they are not anymore,
+			// because otherwise one of these vertices might be incorrectly included in the set of split vertices of the split
+			// that is currently happening, which will lead to buggy behaviour.
+			// This split is invalidated because the adjacent edge changed (was split up).
+			// Because UpdateConnections sets these vertices to be recalculated, IF they are still going to split anything later,
+			// it will be correctly recalculated after this split was processed.
+			vertexDatas[oldEdge.prevVertexIndex].partOfSplitEvent = false;
+			vertexDatas[oldEdge.nextVertexIndex].partOfSplitEvent = false;
+
 			// return the new vertex id
 			return newVertexIndex;
 		}
