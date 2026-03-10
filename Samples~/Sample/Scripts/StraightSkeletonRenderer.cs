@@ -3,11 +3,12 @@ using System.Collections.Generic;
 using UnityEngine;
 using Briganti.StraightSkeletonGeneration;
 using Unity.Mathematics;
+using UnityEngine.Serialization;
 
 public class StraightSkeletonRenderer : MonoBehaviour
 {
-	public float2[] polygonCounterClockwise; // inspector
-	public float2[] holeClockwise; // inspector
+	public float2[] polygonClockwise; // inspector
+	public float2[] holeCounterClockwise; // inspector
 
 	public Transform polygonLinePrefab; // inspector
 	public Transform straightSkeletonLinePrefab; // inspector
@@ -16,7 +17,7 @@ public class StraightSkeletonRenderer : MonoBehaviour
 	public void Start()
 	{
 		// set up the input structure
-		PolygonWithHoles polygonWithHoles = new PolygonWithHoles(polygonCounterClockwise, new List<float2[]>() { holeClockwise });
+		PolygonWithHoles polygonWithHoles = new PolygonWithHoles(polygonClockwise, new List<float2[]>() { holeCounterClockwise });
 
 		// render the original polygon in 3D
 		GeneratePolygonLines(polygonWithHoles);
@@ -31,9 +32,9 @@ public class StraightSkeletonRenderer : MonoBehaviour
 
 	private void GeneratePolygonLines(PolygonWithHoles polygon)
 	{
-		GeneratePolygonLines(polygon.outerContourCounterClockwise);
+		GeneratePolygonLines(polygon.outerContourClockwise);
 
-		foreach (float2[] hole in polygon.innerContoursClockwise) {
+		foreach (float2[] hole in polygon.innerContoursCounterClockwise) {
 			GeneratePolygonLines(hole);
 		}
 	}
