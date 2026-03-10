@@ -5,8 +5,8 @@ namespace Briganti.StraightSkeletonGeneration
 {
 	public class PolygonWithHoles
 	{
-		public float2[] outerContourCounterClockwise;
-		public List<float2[]> innerContoursClockwise = new List<float2[]>();
+		public float2[] outerContourClockwise;
+		public List<float2[]> innerContoursCounterClockwise = new List<float2[]>();
 
 		// set everything manually
 		public PolygonWithHoles()
@@ -14,16 +14,16 @@ namespace Briganti.StraightSkeletonGeneration
 		}
 
 		// only an outer contour
-		public PolygonWithHoles(float2[] outerContourCounterClockwise)
+		public PolygonWithHoles(float2[] outerContourClockwise)
 		{
-			this.outerContourCounterClockwise = outerContourCounterClockwise;
+			this.outerContourClockwise = outerContourClockwise;
 		}
 
 		// outer + inner contours
-		public PolygonWithHoles(float2[] outerContour, List<float2[]> innerContoursClockwise)
+		public PolygonWithHoles(float2[] outerContourClockwise, List<float2[]> innerContoursCounterClockwise)
 		{
-			this.outerContourCounterClockwise = outerContour;
-			this.innerContoursClockwise = innerContoursClockwise;
+			this.outerContourClockwise = outerContourClockwise;
+			this.innerContoursCounterClockwise = innerContoursCounterClockwise;
 		}
 	}
 }
