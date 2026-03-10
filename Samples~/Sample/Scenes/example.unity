@@ -170,6 +170,25 @@ MonoBehaviour:
     y: -1
   - x: -3
     y: 0
+  polygonClockwise:
+  - x: -5
+    y: 0
+  - x: -5
+    y: 5
+  - x: 0
+    y: 7
+  - x: 5
+    y: 5
+  - x: 5
+    y: 0
+  - x: 3
+    y: 0
+  - x: 3
+    y: -1
+  - x: -3
+    y: -1
+  - x: -3
+    y: 0
   holeClockwise:
   - x: -2
     y: 2
@@ -179,10 +198,17 @@ MonoBehaviour:
     y: 3
   - x: -2
     y: 3
-  polygonLinePrefab: {fileID: 6752374611451121910, guid: dd28a48870602a84993bcbc9b0e310a4,
-    type: 3}
-  straightSkeletonLinePrefab: {fileID: 6752374611451121910, guid: 41a5394cf049b8846ab12430a755e928,
-    type: 3}
+  holeCounterClockwise:
+  - x: -2
+    y: 2
+  - x: 2
+    y: 2
+  - x: 2
+    y: 3
+  - x: -2
+    y: 3
+  polygonLinePrefab: {fileID: 6752374611451121910, guid: dd28a48870602a84993bcbc9b0e310a4, type: 3}
+  straightSkeletonLinePrefab: {fileID: 6752374611451121910, guid: 41a5394cf049b8846ab12430a755e928, type: 3}
 --- !u!4 &1071052015
 Transform:
   m_ObjectHideFlags: 0
