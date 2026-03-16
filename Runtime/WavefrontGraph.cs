@@ -708,10 +708,10 @@ namespace Briganti.StraightSkeletonGeneration
 
 			// this is a very simple case - both vertices are at the exact same position, so the edge is basically already zero
 			// this can be caused by two edge events happening at the same position, and causing two new vertices there.
-			if (math.distancesq(prevVertex, nextVertex) < Geometry2D.EPS)
+			if (math.distancesq(prevVertex, nextVertex) < Geometry2D.EPS_HIGHPRECISION)
 			{
 				eventData.eventType = EventType.Edge;
-				eventData.eventPos = prevVertex;
+				eventData.eventPos = (prevVertex + nextVertex) * 0.5f;
 				eventData.eventTime = prevData.creationTime;
 				Profiler.EndSample();
 				return;
