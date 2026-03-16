@@ -253,8 +253,8 @@ namespace Briganti.StraightSkeletonGeneration
 			// we now log the upcoming events
 			if (logger != null)
 			{
-				int n = math.min(5, eventQueue.Count);
-				n = eventQueue.Count;
+				int n = math.min(10, eventQueue.Count);
+				//n = eventQueue.Count;
 				int idx = 1;
 				logger?.Log($"Upcoming {n} (out of {eventQueue.Count})  events (max allowed {eventQueue.MaxSize}):", 0);
 				foreach (int upcomingQueueEventIndex in eventQueue.EnumerateFirst(n))
